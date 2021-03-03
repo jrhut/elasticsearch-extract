@@ -18,7 +18,7 @@ You can also test your query in the kibana dev tools sandbox. (very handy)
 
 # Query Examples
 
-default
+Default query
 
 ```
 QUERY = {
@@ -29,7 +29,7 @@ QUERY = {
 ```
 
 
-Wildcard string query
+Wildcard string query on multiple fields
 
 ```
 QUERY = {
