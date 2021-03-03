@@ -18,7 +18,7 @@ You can also test your query in the kibana dev tools sandbox. (very handy)
 
 # Query Examples
 
-Default query
+Default query to gather entire index
 
 ```
 QUERY = {
