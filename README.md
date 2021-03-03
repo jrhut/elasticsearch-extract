@@ -28,6 +28,15 @@ QUERY = {
 }
 ```
 
+Simple single term query
+
+```
+QUERY = {
+    "query": {
+        "term": {"tags": "altright"}
+    }
+}
+```
 
 Wildcard string query on multiple fields
 
