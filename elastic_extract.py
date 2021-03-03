@@ -12,7 +12,7 @@ ELASTIC_SECRET = os.getenv("ELASTIC_SECRET")
 
 QUERY = {
     "query": {
-        "match": {"full_text": "nz"}
+        "match_all": {}
     }
 }
 
