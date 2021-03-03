@@ -34,7 +34,26 @@ Wildcard string query on multiple fields
 ```
 QUERY = {
     "query": {
-        "query_string": {"query": "vac* OR vax*", "fields": ["full_text"]}
+        "query_string": {"query": "vac* OR vax*", "fields": ["full_text", "quoted_status.full_text"]}
+    }
+}
+```
+
+Boolean searches on different fields using must (AND) and should (OR)
+
+```
+QUERY = {
+    "query": {
+        "bool": {
+            "must": [
+                {
+                    "query_string": {"query": "vac* OR vax*", "default_field": "full_text"}
+                },
+                {
+                    "query_string": {"query": "vac* OR vax*", "default_field": "full_text"}
+                }
+            ]
+        }
     }
 }
 ```
