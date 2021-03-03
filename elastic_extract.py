@@ -71,7 +71,7 @@ while True:  # Main response loop
     QUERY["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
 
     if df is None:  # First iteration
-        df = pandas.DataFrame(elastic_docs)  # Create a dataframe to convert JSON data to table
+        df = pandas.DataFrame(elastic_docs)  # Create a dataframe to convert JSON to table
         headers = df.columns
         write_csv_headers(df)  # Create csv
         continue  # Skip the append to avoid duplicate data
