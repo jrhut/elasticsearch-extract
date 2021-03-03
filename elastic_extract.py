@@ -32,8 +32,6 @@ def get_last_doc(docs, hits):
 es = Elasticsearch([KIBANA_HOST], http_auth=(KIBANA_USER, KIBANA_SECRET), scheme="https", port=KIBANA_PORT,
                    verify_certs=False, ssl_show_warn=False)
 
-elastic_docs = []
-
 print("Counting documents in query")
 
 response = es.count(index="ps_tweets*", body=QUERY)
@@ -41,6 +39,10 @@ document_count = response['count']
 
 print(f"Found {document_count} documents matching query")
 print("Beginning download")
+
+count = 0
+first_run = True
+elastic_docs = []
 
 while True:
     response = es.search(index="ps_tweets*", size=10000, sort=["created_at:asc", "id:asc"], body=QUERY)
@@ -52,9 +54,24 @@ while True:
     elastic_docs, last_timestamp, last_id = get_last_doc(elastic_docs, res_docs)
     QUERY["search_after"] = [last_timestamp, last_id]
 
-    print(f"Download: [{len(elastic_docs)}/{document_count}]")
+    if first_run:
+        print("Saving data")
+        df = pandas.DataFrame(elastic_docs)
+        df.to_csv("query_output.csv", ",")
+        first_run = False
+        elastic_docs = []
+    elif len(elastic_docs) >= 100000:
+        print("Saving data")
+        df = pandas.DataFrame(elastic_docs)
+        df.to_csv("query_output.csv", ",", mode="a", header=False)
+        elastic_docs = []
 
-print("Saving data to query_output.csv")
-df = pandas.DataFrame(elastic_docs)
-df.to_csv("query_output.csv", ",")
+    count += len(res_docs)
+    print(f"Download: [{count}/{document_count}]")
+
+if len(elastic_docs > 0):
+    df = pandas.DataFrame(elastic_docs)
+    df.to_csv("query_output.csv", ",", mode="a", header=False)
+
+print("Saved data to query_output.csv")
 print("Done")
