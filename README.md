@@ -14,4 +14,4 @@ Change the query using the QUERY variable in the main script, the default is a m
 
 
 Find help on Elasticsearch documentation here https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl.html.  
-You can also test your query in the kibana dev tools sandbox (very handy)
+You can also test your query in the kibana dev tools sandbox. (very handy)
