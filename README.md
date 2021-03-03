@@ -57,3 +57,20 @@ QUERY = {
     }
 }
 ```
+
+```
+QUERY = {
+    "query": {
+        "bool": {
+            "should": [
+                {
+                    "query_string": {"query": "vac* OR vax*", "default_field": "full_text"}
+                },
+                {
+                    "term": {"is_quote_status": True}
+                }
+            ]
+        }
+    }
+}
+```
