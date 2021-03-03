@@ -1,6 +1,6 @@
 # Elasticsearch Query Extractor
 
-You will want to create a .env file containing the variables:
+You will want to create a .env file in the repo root, containing the variables:
 
 ELASTIC_HOST\
 ELASTIC_PORT\
