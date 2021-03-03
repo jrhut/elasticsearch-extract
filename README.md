@@ -45,7 +45,7 @@ Boolean searches on different fields using must (AND) and should (OR)
 QUERY = {
     "query": {
         "bool": {
-            "must": [
+            "should": [
                 {
                     "query_string": {"query": "vac* OR vax*", "default_field": "full_text"}
                 },
@@ -62,7 +62,7 @@ QUERY = {
 QUERY = {
     "query": {
         "bool": {
-            "should": [
+            "must": [
                 {
                     "query_string": {"query": "vac* OR vax*", "default_field": "full_text"}
                 },
