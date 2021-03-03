@@ -18,6 +18,10 @@ QUERY = {
 
 FILENAME = "query_output.csv"  # Output filename
 
+INDEX = "ps_tweets*"
+PAGING_ID_FIELD = "id"  # Name of a unique identifying id field
+PAGING_TIMESTAMP_FIELD = "created_at"  # Name of some kind of datetime field
+
 
 def process_response(hits):  # Take list of search results and return the field information and pagination markers
     timestamp = None
@@ -26,8 +30,8 @@ def process_response(hits):  # Take list of search results and return the field 
 
     for num, doc in enumerate(hits):
         source_data = doc["_source"]  # Extract the field information
-        _id = source_data["id"]
-        timestamp = source_data["created_at"]
+        _id = source_data[PAGING_ID_FIELD]
+        timestamp = source_data[PAGING_TIMESTAMP_FIELD]
         docs.append(source_data)  # Add the field JSON information to a document list
 
     return docs, timestamp, _id
@@ -45,26 +49,26 @@ es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), sch
 
 print("Counting documents in query")
 
-response = es.count(index="ps_tweets*", body=QUERY)  # Send a count query to check the total hits of the search
+response = es.count(index=INDEX, body=QUERY)  # Send a count query to check the total hits of the search
 document_count = response['count']
 
 print(f"Found {document_count} documents matching query")
 print("Beginning download")
 
-count = 0
+current_count = 0
 headers = []
 df = pandas.DataFrame()
 
 while True:  # Main response loop
     # Search query on main index using max documents per query (10,000) and sort to allow for paging
-    response = es.search(index="ps_tweets*", size=10000, sort=["created_at:asc", "id:asc"], body=QUERY)
+    response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"], body=QUERY)
     res_docs = response["hits"]["hits"]
 
     if not res_docs:  # If no new responses returned leave loop
         break
 
-    count += len(res_docs)
-    print(f"Downloading: [{count}/{document_count}]")
+    current_count += len(res_docs)
+    print(f"Downloading: [{current_count}/{document_count}]")
 
     elastic_docs, last_timestamp, last_id = process_response(res_docs)  # Extracts data from nested JSON
 
@@ -86,7 +90,7 @@ while True:  # Main response loop
 if df.size > 0:  # If results are left in dataframe after exiting main loop
     df.to_csv(FILENAME, ",", mode="a", header=False, index=False)  # Append them to the csv
 
-if count > 0:
+if current_count > 0:
     print("Saved data to query_output.csv")
 else:
     print("No results nothing saved")
