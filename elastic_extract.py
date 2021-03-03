@@ -10,7 +10,6 @@ ELASTIC_PORT = os.getenv("ELASTIC_PORT")
 ELASTIC_USER = os.getenv("ELASTIC_USER")
 ELASTIC_SECRET = os.getenv("ELASTIC_SECRET")
 
-# The _search query performed on the index
 QUERY = {
     "query": {
         "match_all": {}
@@ -20,16 +19,16 @@ QUERY = {
 FILENAME = "query_output.csv"  # Output filename
 
 
-def process_response(hits):  # Take list of result hits and return the field information and pagination markers
+def process_response(hits):  # Take list of search results and return the field information and pagination markers
     timestamp = None
     _id = None
-    docs = []  # List of document's JSON field information
+    docs = []
 
-    for num, doc in enumerate(hits):  # Dig down into each nested document
+    for num, doc in enumerate(hits):
         source_data = doc["_source"]  # Extract the field information
         _id = source_data["id"]
         timestamp = source_data["created_at"]
-        docs.append(source_data)  # Add the field information to document list
+        docs.append(source_data)  # Add the field JSON information to a document list
 
     return docs, timestamp, _id
 
@@ -72,7 +71,7 @@ while True:  # Main response loop
     QUERY["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
 
     if df is None:  # First iteration
-        df = pandas.DataFrame(elastic_docs)  # Create a dataframe of the documents for tabling
+        df = pandas.DataFrame(elastic_docs)  # Create a dataframe to convert JSON data to table
         headers = df.columns
         write_csv_headers(df)  # Create csv
         continue  # Skip the append to avoid duplicate data
@@ -80,9 +79,9 @@ while True:  # Main response loop
     if len(df.index) >= 100000:  # When the dataframe becomes too large save it to the csv and empty it
         print("Saving large data chunk")
         df.to_csv(FILENAME, ",", mode="a", header=False, index=False)  # Appending to output csv
-        df = pandas.DataFrame(columns=headers)  # Clearing dataframe
+        df = pandas.DataFrame(columns=headers)  # Clear dataframe
 
-    df = df.append(elastic_docs)  # Adding new documents to the dataframe
+    df = df.append(elastic_docs)  # Add new documents to the dataframe
 
 
 if df.size > 0:  # If results are left in dataframe after exiting main loop
