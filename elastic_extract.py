@@ -1,6 +1,7 @@
 from elasticsearch import Elasticsearch
 import pandas
 import os
+import csv
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,14 +12,17 @@ ELASTIC_SECRET = os.getenv("ELASTIC_SECRET")
 
 QUERY = {
     "query": {
-        "match_all": {}
+        "match": {"full_text": "vaccine"}
     }
 }
 
+FILENAME = "query_output.csv"
 
-def get_last_doc(docs, hits):
+
+def process_response(hits):
     timestamp = None
     _id = None
+    docs = []
 
     for num, doc in enumerate(hits):
         source_data = doc["_source"]
@@ -27,6 +31,13 @@ def get_last_doc(docs, hits):
         docs.append(source_data)
 
     return docs, timestamp, _id
+
+
+def write_csv_headers(frame):
+    print(f"Writing headers to {FILENAME}")
+    with open(FILENAME, 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(frame.columns)
 
 
 es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), scheme="https", port=ELASTIC_PORT,
@@ -41,37 +52,39 @@ print(f"Found {document_count} documents matching query")
 print("Beginning download")
 
 count = 0
-first_run = True
-elastic_docs = []
+headers = []
+df = None
 
 while True:
     response = es.search(index="ps_tweets*", size=10000, sort=["created_at:asc", "id:asc"], body=QUERY)
     res_docs = response["hits"]["hits"]
 
+    count += len(res_docs)
+    print(f"Downloading: [{count}/{document_count}]")
+
     if not res_docs:
         break
 
-    elastic_docs, last_timestamp, last_id = get_last_doc(elastic_docs, res_docs)
+    elastic_docs, last_timestamp, last_id = process_response(res_docs)
+
     QUERY["search_after"] = [last_timestamp, last_id]
 
-    if first_run:
-        print("Saving data")
+    if df is None:
         df = pandas.DataFrame(elastic_docs)
-        df.to_csv("query_output.csv", ",")
-        first_run = False
-        elastic_docs = []
-    elif len(elastic_docs) >= 100000:
-        print("Saving data")
-        df = pandas.DataFrame(elastic_docs)
-        df.to_csv("query_output.csv", ",", mode="a", header=False)
-        elastic_docs = []
+        headers = df.columns
+        write_csv_headers(df)
+        continue
 
-    count += len(res_docs)
-    print(f"Download: [{count}/{document_count}]")
+    if len(df.index) >= 10000:
+        print("Saving large data chunk")
+        df.to_csv(FILENAME, ",", mode="a", header=False, index=False)
+        df = pandas.DataFrame(columns=headers)
 
-if len(elastic_docs > 0):
-    df = pandas.DataFrame(elastic_docs)
-    df.to_csv("query_output.csv", ",", mode="a", header=False)
+    df = df.append(elastic_docs)
+
+
+if df.size > 0:
+    df.to_csv(FILENAME, ",", mode="a", header=False, index=False)
 
 print("Saved data to query_output.csv")
 print("Done")
