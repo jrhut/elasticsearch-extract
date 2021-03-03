@@ -12,7 +12,7 @@ ELASTIC_SECRET = os.getenv("ELASTIC_SECRET")
 
 QUERY = {
     "query": {
-        "match": {"full_text": "vaccine"}
+        "match": {"full_text": "nz"}
     }
 }
 
@@ -59,11 +59,11 @@ while True:
     response = es.search(index="ps_tweets*", size=10000, sort=["created_at:asc", "id:asc"], body=QUERY)
     res_docs = response["hits"]["hits"]
 
-    count += len(res_docs)
-    print(f"Downloading: [{count}/{document_count}]")
-
     if not res_docs:
         break
+
+    count += len(res_docs)
+    print(f"Downloading: [{count}/{document_count}]")
 
     elastic_docs, last_timestamp, last_id = process_response(res_docs)
 
@@ -75,7 +75,7 @@ while True:
         write_csv_headers(df)
         continue
 
-    if len(df.index) >= 10000:
+    if len(df.index) >= 100000:
         print("Saving large data chunk")
         df.to_csv(FILENAME, ",", mode="a", header=False, index=False)
         df = pandas.DataFrame(columns=headers)
