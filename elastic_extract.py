@@ -53,7 +53,7 @@ print("Beginning download")
 
 count = 0
 headers = []
-df = None
+df = pandas.DataFrame()
 
 while True:  # Main response loop
     # Search query on main index using max documents per query (10,000) and sort to allow for paging
@@ -70,7 +70,7 @@ while True:  # Main response loop
 
     QUERY["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
 
-    if df is None:  # First iteration
+    if df.size == 0:  # First iteration
         df = pandas.DataFrame(elastic_docs)  # Create a dataframe to convert JSON to table
         headers = df.columns
         write_csv_headers(df)  # Create csv
@@ -83,9 +83,12 @@ while True:  # Main response loop
 
     df = df.append(elastic_docs)  # Add new documents to the dataframe
 
-
 if df.size > 0:  # If results are left in dataframe after exiting main loop
     df.to_csv(FILENAME, ",", mode="a", header=False, index=False)  # Append them to the csv
 
-print("Saved data to query_output.csv")
+if count > 0:
+    print("Saved data to query_output.csv")
+else:
+    print("No results nothing saved")
+
 print("Done")
