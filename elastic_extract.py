@@ -4,10 +4,10 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-KIBANA_HOST = os.getenv("KIBANA_HOST")
-KIBANA_PORT = os.getenv("KIBANA_PORT")
-KIBANA_USER = os.getenv("KIBANA_USER")
-KIBANA_SECRET = os.getenv("KIBANA_SECRET")
+ELASTIC_HOST = os.getenv("ELASTIC_HOST")
+ELASTIC_PORT = os.getenv("ELASTIC_PORT")
+ELASTIC_USER = os.getenv("ELASTIC_USER")
+ELASTIC_SECRET = os.getenv("ELASTIC_SECRET")
 
 QUERY = {
     "query": {
@@ -29,7 +29,7 @@ def get_last_doc(docs, hits):
     return docs, timestamp, _id
 
 
-es = Elasticsearch([KIBANA_HOST], http_auth=(KIBANA_USER, KIBANA_SECRET), scheme="https", port=KIBANA_PORT,
+es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), scheme="https", port=ELASTIC_PORT,
                    verify_certs=False, ssl_show_warn=False)
 
 print("Counting documents in query")
