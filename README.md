@@ -1,5 +1,7 @@
 # Elasticsearch Query Extractor
 
+Extracts all query results from Elasticsearch and saves it to 'query_output.csv'!
+
 You will want to create a .env file in the repo root, containing the variables:
 
 ELASTIC_HOST\
