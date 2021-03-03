@@ -39,7 +39,7 @@ def process_response(hits):  # Take list of search results and return the field 
 
 def write_csv_headers(frame):  # Writes headers to new csv
     print(f"Writing headers to {FILENAME}")
-    with open(FILENAME, 'w') as f:
+    with open(FILENAME, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(frame.columns)
 
@@ -61,7 +61,8 @@ df = pandas.DataFrame()
 
 while True:  # Main response loop
     # Search query on main index using max documents per query (10,000) and sort to allow for paging
-    response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"], body=QUERY)
+    response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
+                         body=QUERY)
     res_docs = response["hits"]["hits"]
 
     if not res_docs:  # If no new responses returned leave loop
