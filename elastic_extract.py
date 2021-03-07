@@ -61,19 +61,25 @@ def write_csv_headers(frame):  # Writes headers to new csv
 
 
 def parse_arguments(q, f):
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("Elasticsearch query tool")
     parser.add_argument("-m", "--match_all", help="Match all fields, downloads all data", action="store_true")
     parser.add_argument("-s", "--search", help="Takes 2 arguments, fields you want to search then the string query "
                                                "you wish to run",
                         nargs=2,
-                        action="append")
-    parser.add_argument("-e", "--exists", help="Takes 1 argument, field you want to check for a value", action="append")
+                        action="append",
+                        metavar="string")
+    parser.add_argument("-e", "--exists", help="Takes 1 argument, field you want to check for a value", action="append",
+                        metavar="field")
     parser.add_argument("-a", "--AND", help="Link multiple queries together", action="store_true")
     parser.add_argument("-o", "--OR", help="Link multiple queries together", action="store_true")
-    parser.add_argument("-f", "--fields", help="Select output fields")
-    parser.add_argument("-d", "--date_field", help="The date field", default="created_at")
-    parser.add_argument("-sd", "--start", help="Starting date to search from yyyy-mm-dd")
-    parser.add_argument("-ed", "--end", help="Ending date to stop searching yyyy-mm-dd or now")
+    parser.add_argument("-f", "--fields", help="Select output fields",
+                        metavar="fields")
+    parser.add_argument("-d", "--date_field", help="The date field, default to created_at", default="created_at",
+                        metavar="field")
+    parser.add_argument("-sd", "--start", help="Starting date to search from yyyy-mm-dd",
+                        metavar="date (yyyy-mm-dd)")
+    parser.add_argument("-ed", "--end", help="Ending date to stop searching yyyy-mm-dd or now",
+                        metavar="date (yyyy-mm-dd)")
     args = parser.parse_args()
 
     if args.match_all:
