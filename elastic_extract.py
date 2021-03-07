@@ -3,6 +3,7 @@ import pandas
 import os
 import csv
 from dotenv import load_dotenv
+import argparse
 
 load_dotenv()  # Load variables from .env into system environment
 ELASTIC_HOST = os.getenv("ELASTIC_HOST")
@@ -10,17 +11,32 @@ ELASTIC_PORT = os.getenv("ELASTIC_PORT")
 ELASTIC_USER = os.getenv("ELASTIC_USER")
 ELASTIC_SECRET = os.getenv("ELASTIC_SECRET")
 
-QUERY = {
-    "query": {
-        "match_all": {}
-    }
-}
-
 FILENAME = "query_output.csv"  # Output filename
-
 INDEX = "ps_tweets*"
 PAGING_ID_FIELD = "id"  # Name of a unique identifying id field
 PAGING_TIMESTAMP_FIELD = "created_at"  # Name of some kind of datetime field
+QUERY = {"query": {}}
+FIELDS = []
+
+
+def bool_parser(q, b):
+    if len(args.search) + len(args.exists) == 1:
+        q['query']['bool'][b] = {}
+        if args.search:
+            q['query']['bool'][b] = {"query_string": {"query": args.search[0][1],
+                                                      "fields": args.search[0][0].split()}}
+        elif args.exists:
+            q['query']['bool'][b] = {"exists": {"field": args.exists[0]}}
+    else:
+        q['query']['bool'][b] = []
+        for i in range(len(args.search)):
+            q['query']['bool'][b].append({"query_string": {"query": args.search[i][1],
+                                                           "fields": args.search[i][0].split()}})
+        for i in range(len(args.exists)):
+            q['query']['bool'][b].append({"exists": {"field": args.exists[i]}})
+
+    print(q)
+    return q
 
 
 def process_response(hits):  # Take list of search results and return the field information and pagination markers
@@ -44,8 +60,38 @@ def write_csv_headers(frame):  # Writes headers to new csv
         writer.writerow(frame.columns)
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-s", "--search", help="Fields you want to search then the string query you wish to run", nargs=2,
+                    action="append")
+parser.add_argument("-e", "--exists", help="Field you want to check for a value", action="append")
+parser.add_argument("-a", "--AND", help="Link multiple queries together", action="store_true")
+parser.add_argument("-o", "--OR", help="Link multiple queries together", action="store_true")
+parser.add_argument("-f", "--fields", help="Select output fields")
+parser.add_argument("-d", "--date_field", help="The date field", default="created_at")
+parser.add_argument("-sd", "--start", help="Starting date to seach from yyyy-mm-dd")
+parser.add_argument("-ed", "--end", help="Ending date to stop searching yyyy-mm-dd or now")
+args = parser.parse_args()
+
+
+if args.AND or args.OR or args.start:
+    QUERY['query']['bool'] = {}
+
+if args.start and args.end:
+    QUERY['query']['bool']['filter'] = {}
+    QUERY['query']['bool']['filter']['range'] = {
+        args.date_field: {"gte": args.start, "lte": args.end, "format": "yyyy-MM-dd"}}
+
+if args.AND:
+    QUERY = bool_parser(QUERY, "must")
+elif args.OR:
+    QUERY = bool_parser(QUERY, "should")
+
+if args.fields:
+    FIELDS = ['id', 'created_at']
+    FIELDS += args.fields.split()
+
 es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), scheme="https", port=ELASTIC_PORT,
-                   verify_certs=False, ssl_show_warn=False) # Open connection to the Elasticsearch database
+                   verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
 
 print("Counting documents in query")
 
@@ -61,8 +107,12 @@ df = pandas.DataFrame()
 
 while True:  # Main response loop
     # Search query on main index using max documents per query (10,000) and sort to allow for paging
-    response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
-                         body=QUERY)
+    if args.fields:
+        response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
+                             body=QUERY, _source=FIELDS)
+    else:
+        response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
+                             body=QUERY)
     res_docs = response["hits"]["hits"]
 
     if not res_docs:  # If no new responses returned leave loop
