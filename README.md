@@ -18,5 +18,5 @@ To make a query use the command line arguments provided, see --help.
 
 ```
 python elastic_extract.py --search "full_text" "vac* OR vax*" --AND --exists "entities.urls.url" 
-  --fields "id full_text" --start "2020-09-13" --end "now"
+                            --fields "id full_text" --start "2020-09-13" --end "now"
 ```
