@@ -19,21 +19,21 @@ QUERY = {"query": {}}
 FIELDS = []
 
 
-def bool_parser(q, b):
-    if len(args.search) + len(args.exists) == 1:
+def bool_parser(q, b, a):
+    if len(a.search) + len(a.exists) == 1:
         q['query']['bool'][b] = {}
-        if args.search:
-            q['query']['bool'][b] = {"query_string": {"query": args.search[0][1],
-                                                      "fields": args.search[0][0].split()}}
-        elif args.exists:
-            q['query']['bool'][b] = {"exists": {"field": args.exists[0]}}
+        if a.search:
+            q['query']['bool'][b] = {"query_string": {"query": a.search[0][1],
+                                                      "fields": a.search[0][0].split()}}
+        elif a.exists:
+            q['query']['bool'][b] = {"exists": {"field": a.exists[0]}}
     else:
         q['query']['bool'][b] = []
-        for i in range(len(args.search)):
-            q['query']['bool'][b].append({"query_string": {"query": args.search[i][1],
-                                                           "fields": args.search[i][0].split()}})
-        for i in range(len(args.exists)):
-            q['query']['bool'][b].append({"exists": {"field": args.exists[i]}})
+        for i in range(len(a.search)):
+            q['query']['bool'][b].append({"query_string": {"query": a.search[i][1],
+                                                           "fields": a.search[i][0].split()}})
+        for i in range(len(a.exists)):
+            q['query']['bool'][b].append({"exists": {"field": a.exists[i]}})
 
     print(q)
     return q
@@ -60,35 +60,47 @@ def write_csv_headers(frame):  # Writes headers to new csv
         writer.writerow(frame.columns)
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument("-s", "--search", help="Fields you want to search then the string query you wish to run", nargs=2,
-                    action="append")
-parser.add_argument("-e", "--exists", help="Field you want to check for a value", action="append")
-parser.add_argument("-a", "--AND", help="Link multiple queries together", action="store_true")
-parser.add_argument("-o", "--OR", help="Link multiple queries together", action="store_true")
-parser.add_argument("-f", "--fields", help="Select output fields")
-parser.add_argument("-d", "--date_field", help="The date field", default="created_at")
-parser.add_argument("-sd", "--start", help="Starting date to seach from yyyy-mm-dd")
-parser.add_argument("-ed", "--end", help="Ending date to stop searching yyyy-mm-dd or now")
-args = parser.parse_args()
+def parse_arguments(q, f):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-m", "--match_all", help="Match all fields, downloads all data", action="store_true")
+    parser.add_argument("-s", "--search", help="Takes 2 arguments, fields you want to search then the string query "
+                                               "you wish to run",
+                        nargs=2,
+                        action="append")
+    parser.add_argument("-e", "--exists", help="Takes 1 argument, field you want to check for a value", action="append")
+    parser.add_argument("-a", "--AND", help="Link multiple queries together", action="store_true")
+    parser.add_argument("-o", "--OR", help="Link multiple queries together", action="store_true")
+    parser.add_argument("-f", "--fields", help="Select output fields")
+    parser.add_argument("-d", "--date_field", help="The date field", default="created_at")
+    parser.add_argument("-sd", "--start", help="Starting date to search from yyyy-mm-dd")
+    parser.add_argument("-ed", "--end", help="Ending date to stop searching yyyy-mm-dd or now")
+    args = parser.parse_args()
+
+    if args.match_all:
+        q["query"] = {"match_all": {}}
+        return q, f
+
+    if args.AND or args.OR or args.start:
+        q['query']['bool'] = {}
+
+    if args.start and args.end:
+        q['query']['bool']['filter'] = {}
+        q['query']['bool']['filter']['range'] = {
+            args.date_field: {"gte": args.start, "lte": args.end, "format": "yyyy-MM-dd"}}
+
+    if args.AND:
+        q = bool_parser(q, "must", args)
+    elif args.OR:
+        q = bool_parser(q, "should", args)
+
+    if args.fields:
+        f = ['id', 'created_at']
+        f += args.fields.split()
+
+    return q, f, args
 
 
-if args.AND or args.OR or args.start:
-    QUERY['query']['bool'] = {}
-
-if args.start and args.end:
-    QUERY['query']['bool']['filter'] = {}
-    QUERY['query']['bool']['filter']['range'] = {
-        args.date_field: {"gte": args.start, "lte": args.end, "format": "yyyy-MM-dd"}}
-
-if args.AND:
-    QUERY = bool_parser(QUERY, "must")
-elif args.OR:
-    QUERY = bool_parser(QUERY, "should")
-
-if args.fields:
-    FIELDS = ['id', 'created_at']
-    FIELDS += args.fields.split()
+QUERY, FIELDS, arguments = parse_arguments(QUERY, FIELDS)
 
 es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), scheme="https", port=ELASTIC_PORT,
                    verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
@@ -107,7 +119,7 @@ df = pandas.DataFrame()
 
 while True:  # Main response loop
     # Search query on main index using max documents per query (10,000) and sort to allow for paging
-    if args.fields:
+    if arguments.fields:
         response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
                              body=QUERY, _source=FIELDS)
     else:
