@@ -98,6 +98,11 @@ def parse_arguments(q, f):
         q = bool_parser(q, "must", args)
     elif args.OR:
         q = bool_parser(q, "should", args)
+    elif args.search:
+        q['query'] = {"query_string": {"query": args.search[0][1],
+                                       "fields": args.search[0][0].split()}}
+    elif args.exists:
+        q['query'] = {"exists": {"field": args.exists[0]}}
 
     if args.fields:
         f = ['id', 'created_at']
@@ -112,6 +117,8 @@ es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), sch
                    verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
 
 print("Counting documents in query")
+
+print(QUERY)
 
 response = es.count(index=INDEX, body=QUERY)  # Send a count query to check the total hits of the search
 document_count = response['count']
