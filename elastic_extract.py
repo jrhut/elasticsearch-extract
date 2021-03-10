@@ -20,7 +20,7 @@ FIELDS = []
 
 
 def bool_parser(q, b, a):
-    if len(a.search) + len(a.exists) == 1:
+    if (a.search and not a.exists) or (a.exists and not a.search):
         q['query']['bool'][b] = {}
         if a.search:
             q['query']['bool'][b] = {"query_string": {"query": a.search[0][1],
@@ -98,11 +98,8 @@ def parse_arguments(q, f):
         q = bool_parser(q, "must", args)
     elif args.OR:
         q = bool_parser(q, "should", args)
-    elif args.search:
-        q['query'] = {"query_string": {"query": args.search[0][1],
-                                       "fields": args.search[0][0].split()}}
-    elif args.exists:
-        q['query'] = {"exists": {"field": args.exists[0]}}
+    else:
+        q = bool_parser(q, "must", args)
 
     if args.fields:
         f = ['id', 'created_at']
