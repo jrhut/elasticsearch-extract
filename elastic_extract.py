@@ -37,7 +37,6 @@ def bool_parser(q, b, a):
         for i in range(len(a.exists)):
             q['query']['bool'][b].append({"exists": {"field": a.exists[i]}})
 
-    print(q)
     return q
 
 
@@ -84,10 +83,7 @@ def parse_arguments(q, f):
                         metavar="date (yyyy-mm-dd)")
     args = parser.parse_args()
 
-    if args.match_all:
-        q = bool_parser(q, "must", args)
-
-    if args.AND or args.OR or args.start:
+    if args.AND or args.OR or args.start or args.match_all:
         q['query']['bool'] = {}
 
     if args.start and args.end:
@@ -95,9 +91,7 @@ def parse_arguments(q, f):
         q['query']['bool']['filter']['range'] = {
             args.date_field: {"gte": args.start, "lte": args.end, "format": "yyyy-MM-dd"}}
 
-    if args.AND:
-        q = bool_parser(q, "must", args)
-    elif args.OR:
+    if args.OR:
         q = bool_parser(q, "should", args)
     else:
         q = bool_parser(q, "must", args)
@@ -116,7 +110,7 @@ es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), sch
 
 print("Counting documents in query")
 
-print(QUERY)
+#print(QUERY)
 
 response = es.count(index=INDEX, body=QUERY)  # Send a count query to check the total hits of the search
 document_count = response['count']
