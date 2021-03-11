@@ -1,5 +1,4 @@
 from elasticsearch import Elasticsearch
-import pandas
 import os
 import csv
 from dotenv import load_dotenv
@@ -28,7 +27,7 @@ def bool_parser(q, b, a):
         elif a.exists:
             q['query']['bool'][b] = {"exists": {"field": a.exists[0]}}
     elif a.match_all:
-    	q['query']['bool'][b] = {"match_all": {}}
+        q['query']['bool'][b] = {"match_all": {}}
     else:
         q['query']['bool'][b] = []
         for i in range(len(a.search)):
@@ -38,27 +37,6 @@ def bool_parser(q, b, a):
             q['query']['bool'][b].append({"exists": {"field": a.exists[i]}})
 
     return q
-
-
-def process_response(hits):  # Take list of search results and return the field information and pagination markers
-    timestamp = None
-    _id = None
-    docs = []
-
-    for num, doc in enumerate(hits):
-        source_data = doc["_source"]  # Extract the field information
-        _id = source_data[PAGING_ID_FIELD]
-        timestamp = source_data[PAGING_TIMESTAMP_FIELD]
-        docs.append(source_data)  # Add the field JSON information to a document list
-
-    return docs, timestamp, _id
-
-
-def write_csv_headers(frame):  # Writes headers to new csv
-    print(f"Writing headers to {FILENAME}")
-    with open(FILENAME, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(frame.columns)
 
 
 def parse_arguments(q, f):
@@ -74,7 +52,7 @@ def parse_arguments(q, f):
     parser.add_argument("-a", "--AND", help="Link multiple queries together", action="store_true")
     parser.add_argument("-o", "--OR", help="Link multiple queries together", action="store_true")
     parser.add_argument("-f", "--fields", help="Select output fields",
-                        metavar="fields")
+                        metavar="fields", required=True)
     parser.add_argument("-d", "--date_field", help="The date field, default to created_at", default="created_at",
                         metavar="field")
     parser.add_argument("-sd", "--start", help="Starting date to search from yyyy-mm-dd",
@@ -103,14 +81,57 @@ def parse_arguments(q, f):
     return q, f, args
 
 
+def write_csv_headers(headers):  # Writes headers to new csv
+    print(f"Writing headers to {FILENAME}")
+    with open(FILENAME, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+
+
+def process_response(hits):  # Take list of search results and return the field information and pagination markers
+    timestamp = None
+    _id = None
+    docs = []
+
+    for num, doc in enumerate(hits):
+        source_data = doc["_source"]  # Extract the field information
+        _id = source_data[PAGING_ID_FIELD]
+        timestamp = source_data[PAGING_TIMESTAMP_FIELD]
+        docs.append(source_data)  # Add the field JSON information to a document list
+
+    return docs, timestamp, _id
+
+
+def process_json(sources):
+    parsed_sources = []
+    for source in sources:
+        out = {}
+        for field in FIELDS:
+            if '.' in field:
+                f_split = field.split('.')
+                data = source[f_split[0]]
+                for layer in f_split[1:]:
+                    if type(data) is list:
+                        out[field] = []
+                        for e in data:
+                            out[field].append(e[layer])
+                    else:
+                        data = data[layer]
+                        out[field] = data
+            else:
+                out[field] = source[field]
+        parsed_sources.append(out)
+
+    return parsed_sources
+
+
 QUERY, FIELDS, arguments = parse_arguments(QUERY, FIELDS)
+write_csv_headers(FIELDS)
 
 es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), scheme="https", port=ELASTIC_PORT,
                    verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
 
 print("Counting documents in query")
-
-#print(QUERY)
 
 response = es.count(index=INDEX, body=QUERY)  # Send a count query to check the total hits of the search
 document_count = response['count']
@@ -119,44 +140,34 @@ print(f"Found {document_count} documents matching query")
 print("Beginning download")
 
 current_count = 0
-headers = []
-df = pandas.DataFrame()
 
-while True:  # Main response loop
-    # Search query on main index using max documents per query (10,000) and sort to allow for paging
-    if arguments.fields:
-        response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
-                             body=QUERY, _source=FIELDS)
-    else:
-        response = es.search(index=INDEX, size=10000, sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
-                             body=QUERY)
-    res_docs = response["hits"]["hits"]
+with open(FILENAME, "a", newline="", encoding='utf-8') as file:
+    writer = csv.DictWriter(file, FIELDS)
 
-    if not res_docs:  # If no new responses returned leave loop
-        break
+    while True:  # Main response loop
+        # Search query on main index using max documents per query (10,000) and sort to allow for paging
+        if arguments.fields:
+            response = es.search(index=INDEX, size=10000,
+                                 sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
+                                 body=QUERY, _source=FIELDS)
+        else:
+            response = es.search(index=INDEX, size=10000,
+                                 sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
+                                 body=QUERY)
+        res_docs = response["hits"]["hits"]
 
-    current_count += len(res_docs)
-    print(f"Downloading: [{current_count}/{document_count}]")
+        if not res_docs:  # If no new responses returned leave loop
+            break
 
-    elastic_docs, last_timestamp, last_id = process_response(res_docs)  # Extracts data from nested JSON
+        current_count += len(res_docs)
+        print(f"Downloading: [{current_count}/{document_count}]")
 
-    QUERY["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
+        elastic_docs, last_timestamp, last_id = process_response(res_docs)  # Extracts data from nested JSON
 
-    if df.size == 0:  # First iteration
-        df = pandas.DataFrame(elastic_docs)  # Create a dataframe to convert JSON to table
-        headers = df.columns
-        write_csv_headers(df)  # Create csv
-        continue  # Skip the append to avoid duplicate data
+        QUERY["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
 
-    if len(df.index) >= 100000:  # When the dataframe becomes too large save it to the csv and empty it
-        print("Saving large data chunk")
-        df.to_csv(FILENAME, ",", mode="a", header=False, index=False)  # Appending to output csv
-        df = pandas.DataFrame(columns=headers)  # Clear dataframe
-
-    df = df.append(elastic_docs)  # Add new documents to the dataframe
-
-if df.size > 0:  # If results are left in dataframe after exiting main loop
-    df.to_csv(FILENAME, ",", mode="a", header=False, index=False)  # Append them to the csv
+        rows = process_json(elastic_docs)
+        writer.writerows(rows)
 
 if current_count > 0:
     print("Saved data to query_output.csv")
