@@ -27,6 +27,8 @@ def bool_parser(q, b, a):
                                                       "fields": a.search[0][0].split()}}
         elif a.exists:
             q['query']['bool'][b] = {"exists": {"field": a.exists[0]}}
+    elif a.match_all:
+    	q['query']['bool'][b] = {"match_all": {}}
     else:
         q['query']['bool'][b] = []
         for i in range(len(a.search)):
@@ -83,8 +85,7 @@ def parse_arguments(q, f):
     args = parser.parse_args()
 
     if args.match_all:
-        q["query"] = {"match_all": {}}
-        return q, f
+        q = bool_parser(q, "must", args)
 
     if args.AND or args.OR or args.start:
         q['query']['bool'] = {}
