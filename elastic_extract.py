@@ -109,6 +109,11 @@ def process_json(sources):
         for field in FIELDS:
             if '.' in field:
                 f_split = field.split('.')
+                try:
+                    source[f_split[0]]
+                except:
+                    out[field] = ""
+                    continue
                 data = source[f_split[0]]
                 for layer in f_split[1:]:
                     if type(data) is list:
@@ -119,6 +124,11 @@ def process_json(sources):
                         data = data[layer]
                         out[field] = data
             else:
+                try:
+                    source[field]
+                except:
+                    out[field] = ""
+                    continue
                 out[field] = source[field]
         parsed_sources.append(out)
 
