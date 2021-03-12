@@ -33,11 +33,10 @@ The most basic query is a preset called --match_all that gathers all tweets and 
 python elastic_extract.py --match_all --fields "{FIELD 1} {FIELD ...}"
 ```
 
-You can combine this with the --start and --end to get all tweets in some date range
-the date format used is YYYY-MM-DD
+You can combine this with the --start and --end to get all tweets in some date rangethe date format used is YYYY-MM-DD. For end date you can also use "now" to use the current date.
 
 ```
-python elastic_extract.py --match_all --fields "{FIELD 1} {FIELD ...} --start "{START DATE}" --end "{END DATE}""
+python elastic_extract.py --match_all --fields "{FIELD 1} {FIELD ...} --start "{START DATE}" --end "{END DATE}"
 ```
 
 The general format of a string search looks something like this
