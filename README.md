@@ -61,12 +61,15 @@ python elastic_extract.py --search "{FIELD}" "{SEARCH TERMS}" --AND --search "{F
 # Examples
 
 ```
-python elastic_extract.py --search "full_text" "vac* OR vax*" --AND --exists "entities.urls.expanded_url" 
-                            --fields "user.id full_text" --start "2020-09-13" --end "now"
+python elastic_extract.py --search "full_text" "vac* OR vax*" --AND 
+                            --exists "entities.urls.expanded_url" 
+                              --fields "user.id full_text" 
+                                --start "2020-09-13" --end "now"
 ```
 
 ```
-python elastic_extract.py --match_all --fields "user.id conversation_id entities.urls.expanded_url" 
-                            --start "2020-01-01" --end "now"
+python elastic_extract.py --match_all 
+                            --fields "user.id conversation_id entities.urls.expanded_url" 
+                              --start "2020-01-01" --end "now"
 ```
 --match_all is a preset query that captures all tweets.
