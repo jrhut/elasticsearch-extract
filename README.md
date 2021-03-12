@@ -65,6 +65,7 @@ python elastic_extract.py --search "full_text" "vac* OR vax*" --AND --exists "en
                             --fields "user.id full_text" --start "2020-09-13" --end "now"
 ```
 
+Match all is a special query that captures all tweets.
 ```
 python elastic_extract.py --match_all --fields "user.id conversation_id entities.urls.expanded_url" 
                             --start "2020-01-01" --end "now"
