@@ -34,6 +34,7 @@ python elastic_extract.py --match_all --fields "{FIELD 1} {FIELD ...}"
 ```
 
 You can combine this with the --start and --end to get all tweets in some date range
+the date format used is YYYY-MM-DD for example 2020-01-01
 
 ```
 python elastic_extract.py --match_all --fields "{FIELD 1} {FIELD ...} --start "{START DATE}" --end "{END DATE}""
