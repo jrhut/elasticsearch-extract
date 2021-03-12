@@ -20,6 +20,7 @@ FIELDS = []
 
 def bool_parser(q, b, a):
     if (a.search and not a.exists) or (a.exists and not a.search):
+        q['query']['bool'] = {}
         q['query']['bool'][b] = {}
         if a.search:
             q['query']['bool'][b] = {"query_string": {"query": a.search[0][1],
