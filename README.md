@@ -10,7 +10,7 @@ In the repository directory run the command below to install the requiered packa
 pip install -r requirements.txt
 ```
 
-Then create a .env file in the same directory, containing the variables:\
+Then create a .env file in the same directory, containing the variables:
 
 ```
 ELASTIC_HOST=?
