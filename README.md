@@ -27,6 +27,18 @@ For a short description of arguments you can use
 python elastic_extract.py --help
 ```
 
+The most basic query is a preset called --match_all that gathers all tweets and returns the fields chosen
+
+```
+python elastic_extract.py --match_all --fields "{FIELD 1} {FIELD ...}"
+```
+
+You can combine this with the --start and --end to get all tweets in some date range
+
+```
+python elastic_extract.py --match_all --fields "{FIELD 1} {FIELD ...} --start "{START DATE}" --end "{END DATE}""
+```
+
 The general format of a string search looks something like this
 
 ```
@@ -56,10 +68,9 @@ python elastic_extract.py --search "{FIELD}" "{SEARCH TERMS}" --AND --search "{F
 # Examples
 
 ```
-python elastic_extract.py --search "full_text" "vac* OR vax*" --AND --exists "entities.urls.expanded_url" --fields "user.id full_text" --start "2020-09-13" --end "now"
+python elastic_extract.py --match_all --fields "user.id conversation_id entities.urls.expanded_url" --start "2020-01-01" --end "now"
 ```
 
 ```
-python elastic_extract.py --match_all --fields "user.id conversation_id entities.urls.expanded_url" --start "2020-01-01" --end "now"
+python elastic_extract.py --search "full_text" "vac* OR vax*" --AND --exists "entities.urls.expanded_url" --fields "user.id full_text" --start "2020-09-13" --end "now"
 ```
---match_all is a preset query that captures all tweets.
