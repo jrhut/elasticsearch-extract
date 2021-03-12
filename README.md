@@ -27,6 +27,8 @@ For a short description of arguments you can use
 python elastic_extract.py --help
 ```
 
+Each search must contain a --fields "{FIELD}" argument to note and atleast one query.
+
 The general format of a string search looks something like this
 
 ```
