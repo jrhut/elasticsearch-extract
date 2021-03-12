@@ -11,10 +11,13 @@ pip install -r requirements.txt
 ```
 
 Then create a .env file in the same directory, containing the variables:\
-ELASTIC_HOST=?\
-ELASTIC_PORT=?\
-ELASTIC_USER=?\
+
+```
+ELASTIC_HOST=?
+ELASTIC_PORT=?
+ELASTIC_USER=?
 ELASTIC_SECRET=?
+```
   
 # Usage
 
