@@ -15,6 +15,8 @@ TODO:
     * Julia wraps some python function which: takes a query (search terms, filters, etc etc) and returns a dataframe
     * This reads environment variables etc. No need for outputt paths or anything
 
+  * Add docstrings to functions!
+
 """
 import argparse
 import csv

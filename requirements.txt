@@ -1,2 +1,4 @@
 elasticsearch~=7.11.0
 python-dotenv
+pandas
+argparse
