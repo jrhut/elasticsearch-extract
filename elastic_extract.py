@@ -21,111 +21,131 @@ import csv
 from dotenv import load_dotenv
 from elasticsearch import Elasticsearch
 import os
-
-load_dotenv()  # Load variables from .env into system environment
-ELASTIC_HOST = os.getenv("ELASTIC_HOST")
-ELASTIC_PORT = os.getenv("ELASTIC_PORT")
-ELASTIC_USER = os.getenv("ELASTIC_USER")
-ELASTIC_SECRET = os.getenv("ELASTIC_SECRET")
-
-FILENAME = "query_output.csv"  # Output filename
-INDEX = "ps_tweets*"
-PAGING_ID_FIELD = "id"  # Name of a unique identifying id field
-PAGING_TIMESTAMP_FIELD = "created_at"  # Name of some kind of datetime field
-QUERY = {"query": {}}
-FIELDS = []
+import pandas
+from dataclasses import dataclass, field
 
 
-def bool_parser(q, b, a):
-    if (a.search and not a.exists) or (a.exists and not a.search):
-        q['query']['bool'] = {}
-        q['query']['bool'][b] = {}
-        if a.search:
-            q['query']['bool'][b] = {"query_string": {"query": a.search[0][1],
-                                                      "fields": a.search[0][0].split()}}
-        elif a.exists:
-            q['query']['bool'][b] = {"exists": {"field": a.exists[0]}}
-    elif a.match_all:
-        q['query']['bool'][b] = {"match_all": {}}
+@dataclass
+class Query:
+    json: str
+    index: str = "ps_tweets*"
+    out_fields: list = field(default_factory=list)
+    paging_id_field: str = "id"
+    paging_time_field: str = "created_at"
+
+    def __post_init__(self):
+        self.out_fields.append(self.paging_id_field)
+        self.out_fields.append(self.paging_time_field)
+
+
+def _get_env_variables():
+    load_dotenv()  # Load variables from .env into system environment
+    host = os.getenv("ELASTIC_HOST")
+    port = os.getenv("ELASTIC_PORT")
+    username = os.getenv("ELASTIC_USER")
+    password = os.getenv("ELASTIC_SECRET")
+
+    return host, port, username, password
+
+
+def _generate_query_json(search_fields:list, search_string:str, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False):
+    json = {"query": {'bool': {}}}
+
+    if start_date != None and end_date != None:
+        json['query']['bool']['filter'] = {}
+        json['query']['bool']['filter']['range'] = {date_field: {"gte": start_date, "lte": end_date, "format": "yyyy-MM-dd"}}
+
+    not_composite_query = (search_string == None and field_to_exist != None) or (search_string!= None and field_to_exist == None)
+
+    if not_composite_query:
+        json['query']['bool']['must'] = {}
+        if search_string != None:
+            json['query']['bool']['must'] = {"query_string": {"query": search_string, "fields": search_fields}}
+        elif field_to_exist != None:
+            json['query']['bool']['must'] = {"exists": {"field": field_to_exist}}
+    elif is_match_all:
+        json['query']['bool']['must'] = {"match_all": {}}
     else:
-        q['query']['bool'][b] = []
-        for i in range(len(a.search)):
-            q['query']['bool'][b].append({"query_string": {"query": a.search[i][1],
-                                                           "fields": a.search[i][0].split()}})
-        for i in range(len(a.exists)):
-            q['query']['bool'][b].append({"exists": {"field": a.exists[i]}})
+        json['query']['bool']['must'] = []
+        json['query']['bool']['must'].append({"query_string": {"query": search_string, "fields": search_fields}})
+        json['query']['bool']['must'].append({"exists": {"field": field_to_exist}})
 
-    return q
+    return json
 
 
-def parse_arguments(q, f):
+def _args_to_query(args):
+    json = None
+    if args.search != None:
+        json = _generate_query_json(args.search[0].split(), args.search[1], args.exists, args.date_field, args.start, args.end, args.match_all)
+    else:
+        json = _generate_query_json(None, None, args.exists, args.date_field, args.start, args.end, args.match_all)
+
+    fields = []  
+
+    if args.fields:
+        fields = args.fields.split()
+
+    query = None
+
+    if args.index:
+        query = Query(json=json, out_fields=fields, index=args.index)
+    else:
+        query = Query(json=json, out_fields=fields)
+
+    return query
+
+
+def _get_arguments():
     parser = argparse.ArgumentParser("Elasticsearch query tool")
-    parser.add_argument("-m", "--match_all", help="Match all fields, downloads all data", action="store_true")
+    parser.add_argument("-m", "--match_all", help="Match all fields, downloads all data", action="store_true", default=False)
     parser.add_argument("-s", "--search", help="Takes 2 arguments, fields you want to search then the string query "
                                                "you wish to run",
                         nargs=2,
-                        action="append",
-                        metavar="string")
-    parser.add_argument("-e", "--exists", help="Takes 1 argument, field you want to check for a value", action="append",
-                        metavar="field")
-    parser.add_argument("-a", "--AND", help="Link multiple queries together", action="store_true")
-    parser.add_argument("-o", "--OR", help="Link multiple queries together", action="store_true")
+                        metavar="string",
+                        default=None)
+    parser.add_argument("-e", "--exists", help="Takes 1 argument, field you want to check for a value",
+                        metavar="field", default=None)
+    parser.add_argument("-i", "--index", help="Takes 1 argument, index name", metavar="index", default=None)
     parser.add_argument("-f", "--fields", help="Select output fields",
-                        metavar="fields", required=True)
+                        metavar="fields", default=None)
     parser.add_argument("-d", "--date_field", help="The date field, default to created_at", default="created_at",
                         metavar="field")
     parser.add_argument("-sd", "--start", help="Starting date to search from yyyy-mm-dd",
-                        metavar="date (yyyy-mm-dd)")
+                        metavar="date (yyyy-mm-dd)", default=None)
     parser.add_argument("-ed", "--end", help="Ending date to stop searching yyyy-mm-dd or now",
-                        metavar="date (yyyy-mm-dd)")
+                        metavar="date (yyyy-mm-dd)", default=None)
+    parser.add_argument("-o", "--out", help="Output file", default="output.csv")
     args = parser.parse_args()
 
-    if args.AND or args.OR or args.start or args.match_all:
-        q['query']['bool'] = {}
-
-    if args.start and args.end:
-        q['query']['bool']['filter'] = {}
-        q['query']['bool']['filter']['range'] = {
-            args.date_field: {"gte": args.start, "lte": args.end, "format": "yyyy-MM-dd"}}
-
-    if args.OR:
-        q = bool_parser(q, "should", args)
-    else:
-        q = bool_parser(q, "must", args)
-
-    if args.fields:
-        f = ['id', 'created_at']
-        f += args.fields.split()
-
-    return q, f, args
+    return args
 
 
-def write_csv_headers(headers):  # Writes headers to new csv
-    print(f"Writing headers to {FILENAME}")
-    with open(FILENAME, "w", newline="") as f:
+def _write_csv_headers(headers:list, out_file:str):  # Writes headers to new csv
+    print(f"Writing headers to {out_file}")
+    with open(out_file, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(headers)
 
 
-def process_response(hits):  # Take list of search results and return the field information and pagination markers
+def _process_response(hits:list, id_field:str, time_field:str):  # Take list of search results and return the field information and pagination markers
     timestamp = None
     _id = None
     docs = []
 
     for num, doc in enumerate(hits):
         source_data = doc["_source"]  # Extract the field information
-        _id = source_data[PAGING_ID_FIELD]
-        timestamp = source_data[PAGING_TIMESTAMP_FIELD]
+        _id = source_data[id_field]
+        timestamp = source_data[time_field]
         docs.append(source_data)  # Add the field JSON information to a document list
 
     return docs, timestamp, _id
 
 
-def process_json(sources):
+def _process_json(sources:list, fields:list):
     parsed_sources = []
     for source in sources:
         out = {}
-        for field in FIELDS:
+        for field in fields:
             if '.' in field:
                 f_split = field.split('.')
                 try:
@@ -154,35 +174,85 @@ def process_json(sources):
     return parsed_sources
 
 
-QUERY, FIELDS, arguments = parse_arguments(QUERY, FIELDS)
-write_csv_headers(FIELDS)
+def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Query, out_file:str):
+    es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
+                    verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
 
-es = Elasticsearch([ELASTIC_HOST], http_auth=(ELASTIC_USER, ELASTIC_SECRET), scheme="https", port=ELASTIC_PORT,
-                   verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
+    print("Counting documents in query")
 
-print("Counting documents in query")
+    response = es.count(index=query.index, body=query.json)  # Send a count query to check the total hits of the search
+    document_count = response['count']
 
-response = es.count(index=INDEX, body=QUERY)  # Send a count query to check the total hits of the search
-document_count = response['count']
+    print(f"Found {document_count} documents matching query")
+    print("Beginning download")
 
-print(f"Found {document_count} documents matching query")
-print("Beginning download")
+    current_count = 0
 
-current_count = 0
+    _write_csv_headers(query.out_fields, out_file)
 
-with open(FILENAME, "a", newline="", encoding='utf-8') as file:
-    writer = csv.DictWriter(file, FIELDS)
+    with open(out_file, "a", newline="", encoding='utf-8') as file:
+        writer = csv.DictWriter(file, query.out_fields)
+
+        while True:  # Main response loop
+        
+            # Search query on main index using max documents per query (10,000) and sort to allow for paging
+            
+            response = es.search(index=query.index, size=10000,
+                                sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
+                                body=query.json, _source=query.out_fields)
+            
+            res_docs = response["hits"]["hits"]
+
+            if not res_docs:  # If no new responses returned leave loop
+                break
+
+            current_count += len(res_docs)
+            print(f"Downloading: [{current_count}/{document_count}]")
+
+            elastic_docs, last_timestamp, last_id = _process_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
+
+            query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
+
+            rows = _process_json(elastic_docs, query.out_fields)
+            writer.writerows(rows)
+
+    if current_count > 0:
+        print("Saved data to query_output.csv")
+    else:
+        print("No results nothing saved")
+
+    print("Done")
+
+
+def _query_to_dataframe(host:str, port:str, username:str, password:str, query:Query) -> Query:
+    """ This is the base function that takes elasticsearch connection arguments and a query object
+    and returns a pandas dataframe
+    """
+
+    print("Connecting to elasticsearch")
+
+    es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
+                    verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
+
+    print("Counting documents in query")
+
+    response = es.count(index=query.index, body=query.json)  # Send a count query to check the total hits of the search
+    document_count = response['count']
+
+    print(f"Found {document_count} documents matching query")
+    print("Beginning download")
+
+    current_count = 0
+
+    rows = []
 
     while True:  # Main response loop
+
         # Search query on main index using max documents per query (10,000) and sort to allow for paging
-        if arguments.fields:
-            response = es.search(index=INDEX, size=10000,
-                                 sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
-                                 body=QUERY, _source=FIELDS)
-        else:
-            response = es.search(index=INDEX, size=10000,
-                                 sort=[f"{PAGING_TIMESTAMP_FIELD}:asc", f"{PAGING_ID_FIELD}:asc"],
-                                 body=QUERY)
+        response = es.search(index=query.index, size=10000,
+                            sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
+                            body=query.json, _source=query.out_fields)
+
         res_docs = response["hits"]["hits"]
 
         if not res_docs:  # If no new responses returned leave loop
@@ -191,31 +261,99 @@ with open(FILENAME, "a", newline="", encoding='utf-8') as file:
         current_count += len(res_docs)
         print(f"Downloading: [{current_count}/{document_count}]")
 
-        elastic_docs, last_timestamp, last_id = process_response(res_docs)  # Extracts data from nested JSON
+        elastic_docs, last_timestamp, last_id = _process_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
 
-        QUERY["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
+        query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
 
-        rows = process_json(elastic_docs)
-        writer.writerows(rows)
+        rows += _process_json(elastic_docs, query.out_fields)
 
-if current_count > 0:
-    print("Saved data to query_output.csv")
-else:
-    print("No results nothing saved")
+    df = pandas.DataFrame(rows, columns=query.out_fields)
+    print("Done")
 
-print("Done")
+    return df
 
-def _do_all_the_things(one, two, three):
-    pass
 
-def query_to_dataframe(option1):
-    # READ ENV VARS
-    option2 = os.getenv('BLAH1')
-    option3 = os.getenv('BLAH2')
-    _do_all_the_things(option1, option2, option3)
+def _query_to_json(host:str, port:str, username:str, password:str, query:Query) -> Query:
+    print("Connecting to elasticsearch")
+
+    es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
+                    verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
+
+    print("Counting documents in query")
+
+    response = es.count(index=query.index, body=query.json)  # Send a count query to check the total hits of the search
+    document_count = response['count']
+
+    print(f"Found {document_count} documents matching query")
+    print("Beginning download")
+
+    current_count = 0
+
+    rows = []
+
+    while True:  # Main response loop
+
+        # Search query on main index using max documents per query (10,000) and sort to allow for paging
+        response = es.search(index=query.index, size=10000,
+                            sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
+                            body=query.json, _source=query.out_fields)
+
+        res_docs = response["hits"]["hits"]
+
+        if not res_docs:  # If no new responses returned leave loop
+            break
+
+        current_count += len(res_docs)
+        print(f"Downloading: [{current_count}/{document_count}]")
+
+        elastic_docs, last_timestamp, last_id = _process_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
+
+        query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
+
+        rows += elastic_docs
+
+    print("Done")
+
+    return rows
+
+
+def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False):
+    host, port, username, password = _get_env_variables()
+
+    json = _generate_query_json(fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
+
+    query = None
+
+    if index == None:
+        query = Query(json, out_fields=return_fields)
+    else:
+        query = Query(json, index=index, out_fields=return_fields)
+
+    print(query.json)
+
+    return _query_to_dataframe(host, port, username, password, query)
+
+
+def query_to_json(index:str = None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False):
+    host, port, username, password = _get_env_variables()
+
+    json = _generate_query_json(fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
+
+    query = None
+
+    if index == None:
+        query = Query(json, out_fields=return_fields)
+    else:
+        query = Query(json, index=index, out_fields=return_fields)
+
+    print(query.json)
+
+    return _query_to_json(host, port, username, password, query)
+
 
 def write_dataframe_to_file(df, path, format):
     pass
+
 
 def main():
     """This is the main function which reads the env vars (DISCUSS) and parsees command line args.
@@ -224,6 +362,19 @@ def main():
     2. Do checks on FS etc.
     3. Then do stuff...
     """
+
+    host, port, username, password = _get_env_variables()
+
+    args = _get_arguments()
+    output_file = args.out
+    query = _args_to_query(args)
+    print(query.json)
+
+    #print(_query_to_dataframe(host, port, username, password, query))
+    _query_to_csv_large(host, port, username, password, query, output_file)
+    #print(query_to_dataframe(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url'))
+    #print(query_to_json(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url'))
+    
 
 if __name__ == '__main__':
     main()
