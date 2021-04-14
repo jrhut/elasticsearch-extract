@@ -1,8 +1,26 @@
-from elasticsearch import Elasticsearch
-import os
+#!/usr/bin/env python3
+"""This is the docstring for the library
+TODO:
+  * Discuss the use of ENV VARS, most secure way is to use them even if from a library so the secrets never appear in any notebooks.
+  * BUT it is hard if you HAVE to use ENV VARS, so we make the methods that need the secrets take them as parameters,
+  but have anotehr method that reads the env vars and invokes... encapsulation etc...
+
+  * Also look at writing out JSON - CSV is awesome, but here already
+
+  * Think about what the end goal of this is as a library which is wrapped in Julia.
+  * The Julia library has two extra helper methods (at least) one to write the dataframe to file, and one to read from file and return a dataframe
+  * NOTE: The wrapper should convert the Pandas or whatever DF into a Julia DF...
+  * These methods should/could optionally choose the on disk file format, with a silent default, i.e CSV.
+  * This python library:
+    * Julia wraps some python function which: takes a query (search terms, filters, etc etc) and returns a dataframe
+    * This reads environment variables etc. No need for outputt paths or anything
+
+"""
+import argparse
 import csv
 from dotenv import load_dotenv
-import argparse
+from elasticsearch import Elasticsearch
+import os
 
 load_dotenv()  # Load variables from .env into system environment
 ELASTIC_HOST = os.getenv("ELASTIC_HOST")
@@ -186,3 +204,26 @@ else:
     print("No results nothing saved")
 
 print("Done")
+
+def _do_all_the_things(one, two, three):
+    pass
+
+def query_to_dataframe(option1):
+    # READ ENV VARS
+    option2 = os.getenv('BLAH1')
+    option3 = os.getenv('BLAH2')
+    _do_all_the_things(option1, option2, option3)
+
+def write_dataframe_to_file(df, path, format):
+    pass
+
+def main():
+    """This is the main function which reads the env vars (DISCUSS) and parsees command line args.
+    Look up 'arg pass'
+    1. Read arguments and fail
+    2. Do checks on FS etc.
+    3. Then do stuff...
+    """
+
+if __name__ == '__main__':
+    main()
