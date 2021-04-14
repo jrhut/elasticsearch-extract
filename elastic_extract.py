@@ -15,7 +15,7 @@ TODO:
     * Julia wraps some python function which: takes a query (search terms, filters, etc etc) and returns a dataframe
     * This reads environment variables etc. No need for outputt paths or anything
 
-  * Add docstrings to functions!
+  * Improve docstrings to functions...
 
 """
 import argparse
@@ -41,6 +41,8 @@ class Query:
 
 
 def _get_env_variables():
+    """ Load the environment variables.
+    """
     load_dotenv()  # Load variables from .env into system environment
     host = os.getenv("ELASTIC_HOST")
     port = os.getenv("ELASTIC_PORT")
@@ -51,6 +53,8 @@ def _get_env_variables():
 
 
 def _generate_query_json(search_fields:list, search_string:str, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False):
+    """ Generates the query json body from the simple query parameters.
+    """
     json = {"query": {'bool': {}}}
 
     if start_date != None and end_date != None:
@@ -76,6 +80,8 @@ def _generate_query_json(search_fields:list, search_string:str, field_to_exist:s
 
 
 def _args_to_query(args):
+    """ Take the arguments and return a Query object.
+    """
     json = None
     if args.search != None:
         json = _generate_query_json(args.search[0].split(), args.search[1], args.exists, args.date_field, args.start, args.end, args.match_all)
@@ -98,6 +104,9 @@ def _args_to_query(args):
 
 
 def _get_arguments():
+    """ Parse the command line arguments and return them as an argument
+    object.
+    """
     parser = argparse.ArgumentParser("Elasticsearch query tool")
     parser.add_argument("-m", "--match_all", help="Match all fields, downloads all data", action="store_true", default=False)
     parser.add_argument("-s", "--search", help="Takes 2 arguments, fields you want to search then the string query "
@@ -122,14 +131,19 @@ def _get_arguments():
     return args
 
 
-def _write_csv_headers(headers:list, out_file:str):  # Writes headers to new csv
+def _write_csv_headers(headers:list, out_file:str):
+    """ Write the return fields to the csv file as headers
+    """
     print(f"Writing headers to {out_file}")
     with open(out_file, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(headers)
 
 
-def _process_response(hits:list, id_field:str, time_field:str):  # Take list of search results and return the field information and pagination markers
+def _process_response(hits:list, id_field:str, time_field:str):
+    """ Extract the actual document data from the raw response and take care of
+    pagination.
+    """
     timestamp = None
     _id = None
     docs = []
@@ -144,6 +158,8 @@ def _process_response(hits:list, id_field:str, time_field:str):  # Take list of 
 
 
 def _process_json(sources:list, fields:list):
+    """ Clean the document json data from elasticsearch.
+    """
     parsed_sources = []
     for source in sources:
         out = {}
@@ -177,6 +193,10 @@ def _process_json(sources:list, fields:list):
 
 
 def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Query, out_file:str):
+    """ This is the internal function for handling the connection to elasticsearch and
+    the subsequent API calls with the data provided from the Query object. It then saves
+    the results to a csv file.
+    """
     es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
                     verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
 
@@ -226,11 +246,11 @@ def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Qu
     print("Done")
 
 
-def _query_to_dataframe(host:str, port:str, username:str, password:str, query:Query) -> Query:
-    """ This is the base function that takes elasticsearch connection arguments and a query object
-    and returns a pandas dataframe
+def _query_to_json(host:str, port:str, username:str, password:str, query:Query) -> Query:
+    """ This is the internal function for handling the connection to elasticsearch and
+    the subsequent API calls with the data provided from the Query object. It then returns
+    the resultts in a list of JSON objects.
     """
-
     print("Connecting to elasticsearch")
 
     es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
@@ -269,91 +289,66 @@ def _query_to_dataframe(host:str, port:str, username:str, password:str, query:Qu
 
         rows += _process_json(elastic_docs, query.out_fields)
 
-    df = pandas.DataFrame(rows, columns=query.out_fields)
-    print("Done")
-
-    return df
-
-
-def _query_to_json(host:str, port:str, username:str, password:str, query:Query) -> Query:
-    print("Connecting to elasticsearch")
-
-    es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
-                    verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
-
-    print("Counting documents in query")
-
-    response = es.count(index=query.index, body=query.json)  # Send a count query to check the total hits of the search
-    document_count = response['count']
-
-    print(f"Found {document_count} documents matching query")
-    print("Beginning download")
-
-    current_count = 0
-
-    rows = []
-
-    while True:  # Main response loop
-
-        # Search query on main index using max documents per query (10,000) and sort to allow for paging
-        response = es.search(index=query.index, size=10000,
-                            sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
-                            body=query.json, _source=query.out_fields)
-
-        res_docs = response["hits"]["hits"]
-
-        if not res_docs:  # If no new responses returned leave loop
-            break
-
-        current_count += len(res_docs)
-        print(f"Downloading: [{current_count}/{document_count}]")
-
-        elastic_docs, last_timestamp, last_id = _process_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
-
-        query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
-
-        rows += elastic_docs
-
     print("Done")
 
     return rows
 
 
-def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False):
-    host, port, username, password = _get_env_variables()
-
-    json = _generate_query_json(fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
-
-    query = None
-
-    if index == None:
-        query = Query(json, out_fields=return_fields)
-    else:
-        query = Query(json, index=index, out_fields=return_fields)
-
-    print(query.json)
-
-    return _query_to_dataframe(host, port, username, password, query)
-
-
 def query_to_json(index:str = None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False):
+    """ This is the function that takes in query parameters and returns a list of json objects from
+    elasticsearch documents. This function creates a query object and calls an internal function that handles
+    the actual communication with elasticsearch.
+    """
     host, port, username, password = _get_env_variables()
 
     json = _generate_query_json(fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
 
     query = None
-
     if index == None:
         query = Query(json, out_fields=return_fields)
     else:
         query = Query(json, index=index, out_fields=return_fields)
 
-    print(query.json)
+    response_json = _query_to_json(host, port, username, password, query)
 
-    return _query_to_json(host, port, username, password, query)
+    return response_json
 
 
-def write_dataframe_to_file(df, path, format):
+def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False):
+    """ This is the function that takes in query parameters and returns a pandas datafram from
+    elasticsearch documents. This function creates a query object and calls an internal function that handles
+    the actual communication with elasticsearch.
+    """
+    host, port, username, password = _get_env_variables()
+
+    json = _generate_query_json(fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
+
+    query = None
+    if index == None:
+        query = Query(json, out_fields=return_fields)
+    else:
+        query = Query(json, index=index, out_fields=return_fields)
+
+    response_json = _query_to_json(host, port, username, password, query)    
+    df = pandas.DataFrame(response_json, columns=query.out_fields)
+
+    return df
+
+
+def write_dataframe_to_file(df, path, format="csv"):
+    """ This function takes a dataframe and exports it to either JSON or CSV.
+    """
+    if format == "json":
+        json = df.to_json(orient="records")
+        print(json)
+        #Write json to file here
+    elif format == "csv":
+        df.to_csv(path, index=False)
+
+
+def read_dataframe_from_file(df, path):
+    """ Function to read in either a json formated file or csv into a dataframe.
+    """
     pass
 
 
@@ -370,12 +365,13 @@ def main():
     args = _get_arguments()
     output_file = args.out
     query = _args_to_query(args)
-    print(query.json)
 
-    #print(_query_to_dataframe(host, port, username, password, query))
     _query_to_csv_large(host, port, username, password, query, output_file)
     #print(query_to_dataframe(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url'))
     #print(query_to_json(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url'))
+
+    #df = query_to_dataframe(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url')
+    #write_dataframe_to_file(df, 'anything', 'json')
     
 
 if __name__ == '__main__':
