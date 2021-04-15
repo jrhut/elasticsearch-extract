@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""This is the docstring for the library
+"""A simple library for interacting with elasticsearch databases.
+
 TODO:
   * Discuss the use of ENV VARS, most secure way is to use them even if from a library so the secrets never appear in any notebooks.
   * BUT it is hard if you HAVE to use ENV VARS, so we make the methods that need the secrets take them as parameters,
@@ -15,8 +16,13 @@ TODO:
     * Julia wraps some python function which: takes a query (search terms, filters, etc etc) and returns a dataframe
     * This reads environment variables etc. No need for outputt paths or anything
 
-  * Add JSON save to file
-  *
+NOTE:
+  * Look at encapsulation idea more?
+  * I think most of the features are here I just need to look into turning this into a library
+    (this is one area I am really unsure on)
+  * Could look at more complicated queries but I think the best approach is making multiple
+    queries then joining those DataFrames together in Julia
+    
 
 """
 import argparse
