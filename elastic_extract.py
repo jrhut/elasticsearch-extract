@@ -335,7 +335,7 @@ def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_sear
     return df
 
 
-def write_dataframe_to_file(df, path, format="csv"):
+def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv"):
     """ This function takes a dataframe and exports it to either JSON or CSV.
     """
     if format == "json":
@@ -346,7 +346,7 @@ def write_dataframe_to_file(df, path, format="csv"):
         df.to_csv(path, index=False)
 
 
-def read_dataframe_from_file(df, path):
+def read_dataframe_from_file(df:pandas.DataFrame, path:str):
     """ Function to read in either a json formated file or csv into a dataframe.
     """
     pass
