@@ -472,13 +472,15 @@ def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv") -> 
         df.to_csv(path, index=False)
 
 
-def read_dataframe_from_file(df:pandas.DataFrame, path:str) -> None:
+def read_dataframe_from_file(path:str) -> pandas.DataFrame:
     """ Function to read in either a json formated file or csv into a dataframe.
     NOTE: This function could be put in the Julia wrapper?
 
     Args:
-        df (pandas.DataFrame): the dataframe to be stored to file
         path (str): the path including filename for the output
+
+    Returns:
+        pandas.DataFrame: the csv in a DataFrame
     """
     df = pandas.read_csv(path)
     return df
