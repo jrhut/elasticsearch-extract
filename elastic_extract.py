@@ -26,6 +26,7 @@ from elasticsearch import Elasticsearch
 import os
 import pandas
 from dataclasses import dataclass, field
+import json
 
 
 @dataclass
@@ -299,15 +300,11 @@ def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Qu
 
     with open(out_file, "a", newline="", encoding='utf-8') as file:
         writer = csv.DictWriter(file, query.out_fields)
-
         while True:  # Main response loop
-        
             # Search query on main index using max documents per query (10,000) and sort to allow for paging
-            
             response = es.search(index=query.index, size=10000,
                                 sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
                                 body=query.json, _source=query.out_fields)
-            
             res_docs = response["hits"]["hits"]
 
             if not res_docs:  # If no new responses returned leave loop
@@ -315,11 +312,8 @@ def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Qu
 
             current_count += len(res_docs)
             print(f"Downloading: [{current_count}/{document_count}]")
-
             elastic_docs, last_timestamp, last_id = _get_docs_from_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
-
             query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
-
             rows = _clean_elastic_docs(elastic_docs, query.out_fields)
             writer.writerows(rows)
 
@@ -347,29 +341,24 @@ def _query_to_json(host:str, port:str, username:str, password:str, query:Query) 
         list: a list of cleaned json documents returned by the query
     """
     print("Connecting to elasticsearch")
-
     es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
                     verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
-
     print("Counting documents in query")
-
+    
     response = es.count(index=query.index, body=query.json)  # Send a count query to check the total hits of the search
     document_count = response['count']
-
+    
     print(f"Found {document_count} documents matching query")
     print("Beginning download")
 
     current_count = 0
-
     rows = []
 
     while True:  # Main response loop
-
         # Search query on main index using max documents per query (10,000) and sort to allow for paging
         response = es.search(index=query.index, size=10000,
                             sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
                             body=query.json, _source=query.out_fields)
-
         res_docs = response["hits"]["hits"]
 
         if not res_docs:  # If no new responses returned leave loop
@@ -377,15 +366,11 @@ def _query_to_json(host:str, port:str, username:str, password:str, query:Query) 
 
         current_count += len(res_docs)
         print(f"Downloading: [{current_count}/{document_count}]")
-
         elastic_docs, last_timestamp, last_id = _get_docs_from_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
-
         query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
-
         rows += _clean_elastic_docs(elastic_docs, query.out_fields)
 
     print("Done")
-
     return rows
 
 
@@ -423,7 +408,8 @@ def query_to_json(index:str = None, return_fields:list = [], fields_to_search:li
     else:
         query = Query(json, index=index, out_fields=return_fields)
 
-    response_json = _query_to_json(host, port, username, password, query)
+    response_list = _query_to_json(host, port, username, password, query)
+    response_json = {"data":response_list}
 
     return response_json
 
@@ -453,10 +439,10 @@ def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_sear
         pandas.DataFrame: a DataFrame where the json fields are columns
     """
     response_json = query_to_json(index, return_fields, fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)  
-    fields = response_json[0].keys()
-
-    df = pandas.DataFrame(response_json, columns=fields)
-
+    df = pandas.DataFrame()
+    if len(response_json['data']) > 0:
+        fields = response_json['data'][0].keys()
+        df = pandas.DataFrame(response_json['data'], columns=fields)
     return df
 
 
@@ -471,9 +457,11 @@ def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv") -> 
             or 'csv'
     """
     if format == "json":
-        json = df.to_json(orient="records")
-        print(json)
-        #Write json to file here
+        df_json = df.to_json(orient="records")
+
+        with open(path, 'w') as f:
+            json.dump(df_json, f)
+
     elif format == "csv":
         df.to_csv(path, index=False)
 
@@ -499,14 +487,14 @@ def main() -> None:
     """
 
     host, port, username, password = _get_env_variables()
-
     args = _get_arguments()
+    
     if not _check_arguments(args):
         print('Done')
         return
+   
     output_file = args.out
     query = _args_to_query(args)
-
     _query_to_csv_large(host, port, username, password, query, output_file)
 
     # Testing external functions here
@@ -515,8 +503,8 @@ def main() -> None:
     
     #print(query_to_json(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url'))
 
-    #df = query_to_dataframe(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url')
-    #write_dataframe_to_file(df, 'anything', 'json')
+    #df = query_to_dataframe(fields_to_search=['full_text'], search_string='vac', field_to_exist='entities.urls.expanded_url')
+    #write_dataframe_to_file(df, 'anything.json', 'json')
     
 
 if __name__ == '__main__':
