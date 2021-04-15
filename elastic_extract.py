@@ -22,6 +22,16 @@ NOTE:
     (this is one area I am really unsure on)
   * Could look at more complicated queries but I think the best approach is making multiple
     queries then joining those DataFrames together in Julia
+
+TODO TODO:
+    * read_dataframe_from_file  should either detect format or take it as a parameter seing as 
+      it can be written as JSON. It could also be written as Arrow or something else too.
+    * index: str = "ps_tweets*" you ... could/should/hmm make it a parameter default or at least 
+      define it like DEFAULT_INDEX nice and bold because if someone else out there in the world 
+      uses this it is silently doing weird shit. I would almost take it from ENVVAR and check 
+      for it's existence... Much more reusale and transportable.
+    * You may need to handle responese that are too large too...
+    * Think about moving line 411 to the inner function...
     
 
 """
@@ -470,6 +480,9 @@ def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv") -> 
 
     elif format == "csv":
         df.to_csv(path, index=False)
+
+    else:
+        raise Exception("Invalid format please use either 'json' or 'csv'")
 
 
 def read_dataframe_from_file(path:str) -> pandas.DataFrame:
