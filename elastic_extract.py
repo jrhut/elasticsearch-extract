@@ -15,7 +15,6 @@ TODO:
     * Julia wraps some python function which: takes a query (search terms, filters, etc etc) and returns a dataframe
     * This reads environment variables etc. No need for outputt paths or anything
 
-  * Improve docstrings to functions...
   * Add JSON save to file
   *
 
@@ -42,7 +41,7 @@ class Query:
         self.out_fields.append(self.paging_time_field)
 
 
-def _get_env_variables() -> str, str, str, str:
+def _get_env_variables() -> (str, str, str, str):
     """ Load and return the environment variables.
 
     Returns:
@@ -152,8 +151,6 @@ def _check_arguments(args:argparse.ArgumentParser) -> bool:
     elif not os.path.exists(os.path.dirname(args.out)) and os.path.dirname(args.out) != '':
         print(f"error: the directory '{os.path.dirname(args.out)}' does not exist.")
         return False
-    
-    os.get
 
     return True
 
@@ -202,7 +199,7 @@ def _write_csv_headers(headers:list, out_file:str) -> None:
         writer.writerow(headers)
 
 
-def _get_docs_from_response(hits:list, id_field:str, time_field:str) -> list, str, str:
+def _get_docs_from_response(hits:list, id_field:str, time_field:str) -> (list, str, str):
     """ Extract the actual document data from the raw response and extract
     pagination information.
 
@@ -455,18 +452,10 @@ def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_sear
     Returns:
         pandas.DataFrame: a DataFrame where the json fields are columns
     """
-    host, port, username, password = _get_env_variables()
+    response_json = query_to_json(index, return_fields, fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)  
+    fields = response_json[0].keys()
 
-    json = _generate_query_json(fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
-
-    query = None
-    if index == None:
-        query = Query(json, out_fields=return_fields)
-    else:
-        query = Query(json, index=index, out_fields=return_fields)
-
-    response_json = _query_to_json(host, port, username, password, query)    
-    df = pandas.DataFrame(response_json, columns=query.out_fields)
+    df = pandas.DataFrame(response_json, columns=fields)
 
     return df
 
