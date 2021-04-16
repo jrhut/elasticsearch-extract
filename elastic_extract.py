@@ -24,14 +24,18 @@ NOTE:
     queries then joining those DataFrames together in Julia
 
 TODO TODO:
-    * read_dataframe_from_file  should either detect format or take it as a parameter seing as 
-      it can be written as JSON. It could also be written as Arrow or something else too.
-    * index: str = "ps_tweets*" you ... could/should/hmm make it a parameter default or at least 
-      define it like DEFAULT_INDEX nice and bold because if someone else out there in the world 
-      uses this it is silently doing weird shit. I would almost take it from ENVVAR and check 
-      for it's existence... Much more reusale and transportable.
-    * You may need to handle responese that are too large too...
-    * Think about moving line 411 to the inner function...
+  * read_dataframe_from_file  should either detect format or take it as a parameter seing as 
+    it can be written as JSON. It could also be written as Arrow or something else too.
+    NOTE: Probably can do this...
+  * index: str = "ps_tweets*" you ... could/should/hmm make it a parameter default or at least 
+    define it like DEFAULT_INDEX nice and bold because if someone else out there in the world 
+    uses this it is silently doing weird shit. I would almost take it from ENVVAR and check 
+    for it's existence... Much more reusale and transportable.
+    NOTE: DONE...
+  * You may need to handle responese that are too large too...
+    NOTE: How big is too big??
+  * Think about moving line 411 to the inner function...
+    NOTE: DONE... Eliminated this block of code...
     
 
 """
@@ -41,21 +45,7 @@ from dotenv import load_dotenv
 from elasticsearch import Elasticsearch
 import os
 import pandas
-from dataclasses import dataclass, field
 import json
-
-
-@dataclass
-class Query:
-    json: str
-    index: str = "ps_tweets*"
-    out_fields: list = field(default_factory=list)
-    paging_id_field: str = "id"
-    paging_time_field: str = "created_at"
-
-    def __post_init__(self):
-        self.out_fields.append(self.paging_id_field)
-        self.out_fields.append(self.paging_time_field)
 
 
 def _get_env_variables() -> (str, str, str, str):
@@ -76,7 +66,7 @@ def _get_env_variables() -> (str, str, str, str):
     return host, port, username, password
 
 
-def _generate_query_json(search_fields:list, search_string:str, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False) -> dict:
+def _generate_query_json(search_fields:list, search_string:str, field_to_exist:str = None, date_field:str = None, start_date:str = None, end_date:str = None, is_match_all:bool = False) -> dict:
     """ Generates the query json body from the simple query parameters.
 
     Args:
@@ -96,6 +86,11 @@ def _generate_query_json(search_fields:list, search_string:str, field_to_exist:s
     Returns:
         dict: the json query body used to make API calls
     """
+    if (start_date != None or end_date != None) and date_field == None:
+        date_field = os.getenv("DEFAULT_DATE_FIELD", None)
+        if date_field == None:
+            raise Exception("Error: no 'DEFAULT_DATE_FIELD' environment variable defined. Please supply one as a parameter or define a env variable.")
+
     json = {"query": {'bool': {}}}
 
     if start_date != None and end_date != None:
@@ -120,34 +115,51 @@ def _generate_query_json(search_fields:list, search_string:str, field_to_exist:s
     return json
 
 
-def _args_to_query(args:argparse.ArgumentParser) -> Query:
-    """ Take the arguments and return a Query object.
+def _args_to_query(args:argparse.ArgumentParser) -> (str, dict, list, str, str):
+    """ Take the arguments and returns required data to make an elasticsearch query.
 
     Args:
         args (argparse.ArgumentParser): the arguments passed to the program
 
     Returns:
-        Query: the query object used to call API functions
+        str: index to search into
+        dict: the json body of the query
+        list: the fields to return from the query
+        str: the id field to page on
+        str: the date/time field to page on
     """
+    date_field = None
+    if (args.start != None or args.end != None) and args.date_field == None:
+        date_field = os.getenv("DEFAULT_DATE_FIELD", None)
+    else:
+        date_field = args.date_field
+
     json = None
     if args.search != None:
-        json = _generate_query_json(args.search[0].split(), args.search[1], args.exists, args.date_field, args.start, args.end, args.match_all)
+        json = _generate_query_json(args.search[0].split(), args.search[1], args.exists, date_field, args.start, args.end, args.match_all)
     else:
-        json = _generate_query_json(None, None, args.exists, args.date_field, args.start, args.end, args.match_all)
+        json = _generate_query_json(None, None, args.exists, date_field, args.start, args.end, args.match_all)
 
     fields = []  
-
     if args.fields:
         fields = args.fields.split()
 
-    query = None
-
-    if args.index:
-        query = Query(json=json, out_fields=fields, index=args.index)
+    paging_id_field = None
+    paging_time_field = None
+    if args.page_id == None or args.page_time == None:
+        paging_id_field = os.getenv("PAGE_ID_FIELD", None)
+        paging_time_field = os.getenv("PAGE_TIME_FIELD", None)
+        fields += [paging_id_field, paging_time_field]
     else:
-        query = Query(json=json, out_fields=fields)
+        fields += [args.page_id, args.page_time]
+        paging_id_field = args.page_id
+        paging_time_field = args.page_time
 
-    return query
+    index = None
+    if args.index == None:
+        index = os.getenv("DEFAULT_INDEX", None)
+
+    return (index, json, fields, paging_id_field, paging_time_field)
 
 
 def _check_arguments(args:argparse.ArgumentParser) -> bool:
@@ -160,7 +172,7 @@ def _check_arguments(args:argparse.ArgumentParser) -> bool:
         bool: True if passes argument checks, False if fails
     """
     if  not args.search and not args.exists and not args.match_all:
-        print("Eerror: you must provide a search term")
+        print("error: you must provide a search term")
         return False
     elif (args.start and not args.end) or (not args.start and args.end):
         print("error: you must provide both a start and an end date")
@@ -168,6 +180,26 @@ def _check_arguments(args:argparse.ArgumentParser) -> bool:
     elif not os.path.exists(os.path.dirname(args.out)) and os.path.dirname(args.out) != '':
         print(f"error: the directory '{os.path.dirname(args.out)}' does not exist.")
         return False
+
+    date_field = None
+    if (args.start != None or args.end != None) and args.date_field == None:
+        date_field = os.getenv("DEFAULT_DATE_FIELD", None)
+        if date_field == None:
+            raise Exception("error: no 'DEFAULT_DATE_FIELD' environment variable defined. Please supply one as an argument with -d or define one.")
+
+    paging_id_field = None
+    paging_time_field = None
+    if args.page_id == None or args.page_time == None:
+        paging_id_field = os.getenv("PAGE_ID_FIELD", None)
+        paging_time_field = os.getenv("PAGE_TIME_FIELD", None)
+        if paging_id_field == None or paging_time_field == None:
+            raise Exception("error: no 'PAGE_ID_FIELD' or 'PAGE_TIME_FIELD' environment variables defined. Please provide them as arguments as -pi and -pt or define them.")
+
+    index = None
+    if args.index == None:
+        index = os.getenv("DEFAULT_INDEX", None)
+        if index == None:
+            raise Exception("error: no 'DEFAULT_INDEX' environment variables defined. Please provide one as an argument as -i or define it.")
 
     return True
 
@@ -191,13 +223,15 @@ def _get_arguments() -> argparse.ArgumentParser:
     parser.add_argument("-i", "--index", help="Takes 1 argument, index name", metavar="index", default=None)
     parser.add_argument("-f", "--fields", help="Select output fields",
                         metavar="fields", default=None)
-    parser.add_argument("-d", "--date_field", help="The date field, default to created_at", default="created_at",
+    parser.add_argument("-d", "--date_field", help="The date field, default to None", default=None,
                         metavar="field")
     parser.add_argument("-sd", "--start", help="Starting date to search from yyyy-mm-dd",
                         metavar="date (yyyy-mm-dd)", default=None)
     parser.add_argument("-ed", "--end", help="Ending date to stop searching yyyy-mm-dd or now",
                         metavar="date (yyyy-mm-dd)", default=None)
     parser.add_argument("-o", "--out", help="Output file with path", default="output.csv")
+    parser.add_argument("-pi", "--page_id", help="Id field for paging", default=None)
+    parser.add_argument("-pt", "--page_time", help="Date/time field for paging", default=None)
     args = parser.parse_args()
 
     return args
@@ -287,7 +321,7 @@ def _clean_elastic_docs(sources:list, fields:list) -> list:
     return parsed_sources
 
 
-def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Query, out_file:str) -> None:
+def _query_to_csv_large(host:str, port:str, username:str, password:str, index:str, json:dict, return_fields:list, paging_id_field:str, paging_time_field:str, out_file:str) -> None:
     """ This is the internal function for handling the connection to elasticsearch and
     the subsequent API calls with the data provided from the Query object. It then saves
     the results to a csv file.
@@ -297,14 +331,19 @@ def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Qu
         port (str): the elasticsearch port
         username (str): the elasticsearch username login
         password (str): the elasticsearch password
-        query (Query): query object containing desired query
+        index (str): to search into
+        json (dict): the json body of the query
+        return_fields (list): the fields to return from the query
+        paging_id_field (str): the id field to page on
+        paging_time_field (str): the date/time field to page on
+        out_file (str): the path to the output file including filename
     """
     es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
                     verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
 
     print("Counting documents in query")
 
-    response = es.count(index=query.index, body=query.json)  # Send a count query to check the total hits of the search
+    response = es.count(index=index, body=json)  # Send a count query to check the total hits of the search
     document_count = response['count']
 
     print(f"Found {document_count} documents matching query")
@@ -312,15 +351,15 @@ def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Qu
 
     current_count = 0
 
-    _write_csv_headers(query.out_fields, out_file)
+    _write_csv_headers(return_fields, out_file)
 
     with open(out_file, "a", newline="", encoding='utf-8') as file:
-        writer = csv.DictWriter(file, query.out_fields)
+        writer = csv.DictWriter(file, return_fields)
         while True:  # Main response loop
             # Search query on main index using max documents per query (10,000) and sort to allow for paging
-            response = es.search(index=query.index, size=10000,
-                                sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
-                                body=query.json, _source=query.out_fields)
+            response = es.search(index=index, size=10000,
+                                sort=[f"{paging_time_field}:asc", f"{paging_id_field}:asc"],
+                                body=json, _source=return_fields)
             res_docs = response["hits"]["hits"]
 
             if not res_docs:  # If no new responses returned leave loop
@@ -328,9 +367,9 @@ def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Qu
 
             current_count += len(res_docs)
             print(f"Downloading: [{current_count}/{document_count}]")
-            elastic_docs, last_timestamp, last_id = _get_docs_from_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
-            query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
-            rows = _clean_elastic_docs(elastic_docs, query.out_fields)
+            elastic_docs, last_timestamp, last_id = _get_docs_from_response(res_docs, paging_id_field, paging_time_field)  # Extracts data from nested JSON
+            json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
+            rows = _clean_elastic_docs(elastic_docs, return_fields)
             writer.writerows(rows)
 
     if current_count > 0:
@@ -341,7 +380,7 @@ def _query_to_csv_large(host:str, port:str, username:str, password:str, query:Qu
     print("Done")
 
 
-def _query_to_json(host:str, port:str, username:str, password:str, query:Query) -> Query:
+def _query_to_json(host:str, port:str, username:str, password:str, json:dict, return_fields:list, index:str =None, paging_id_field:str =None, paging_time_field:str =None) -> list:
     """ This is the internal function for handling the connection to elasticsearch and
     the subsequent API calls with the data provided from the Query object. It then returns
     the resultts in a list of JSON objects.
@@ -351,17 +390,36 @@ def _query_to_json(host:str, port:str, username:str, password:str, query:Query) 
         port (str): the elasticsearch port
         username (str): the elasticsearch username login
         password (str): the elasticsearch password
-        query (Query): query object containing desired query
+        json (dict): the json body of the query
+        return_fields (list): the fields to return from the query
+        index (str): to search into
+        paging_id_field (str): the id field to page on
+        paging_time_field (str): the date/time field to page on
 
     Returns:
         list: a list of cleaned json documents returned by the query
     """
+    if paging_id_field == None or paging_time_field == None:
+        paging_id_field = os.getenv("PAGE_ID_FIELD", None)
+        paging_time_field = os.getenv("PAGE_TIME_FIELD", None)
+        return_fields.append(paging_id_field)
+        return_fields.append(paging_time_field)
+        if paging_id_field == None or paging_time_field == None:
+            raise Exception("Error: no 'PAGE_ID_FIELD' or 'PAGE_TIME_FIELD' environment variables defined. Please provide them as parameters or define them.")
+    else:
+        return_fields += [paging_id_field, paging_time_field]
+
+    if index == None:
+        index = os.getenv("DEFAULT_INDEX", None)
+        if index == None:
+            raise Exception("Error: no 'DEFAULT_INDEX' environment variables defined. Please provide it as a parameter or define it.")
+
     print("Connecting to elasticsearch")
     es = Elasticsearch([host], http_auth=(username, password), scheme="https", port=port,
                     verify_certs=False, ssl_show_warn=False)  # Open connection to the Elasticsearch database
     print("Counting documents in query")
     
-    response = es.count(index=query.index, body=query.json)  # Send a count query to check the total hits of the search
+    response = es.count(index=index, body=json)  # Send a count query to check the total hits of the search
     document_count = response['count']
     
     print(f"Found {document_count} documents matching query")
@@ -372,9 +430,9 @@ def _query_to_json(host:str, port:str, username:str, password:str, query:Query) 
 
     while True:  # Main response loop
         # Search query on main index using max documents per query (10,000) and sort to allow for paging
-        response = es.search(index=query.index, size=10000,
-                            sort=[f"{query.paging_time_field}:asc", f"{query.paging_id_field}:asc"],
-                            body=query.json, _source=query.out_fields)
+        response = es.search(index=index, size=10000,
+            sort=[f"{paging_time_field}:asc", f"{paging_id_field}:asc"],
+            body=json, _source=return_fields)
         res_docs = response["hits"]["hits"]
 
         if not res_docs:  # If no new responses returned leave loop
@@ -382,21 +440,23 @@ def _query_to_json(host:str, port:str, username:str, password:str, query:Query) 
 
         current_count += len(res_docs)
         print(f"Downloading: [{current_count}/{document_count}]")
-        elastic_docs, last_timestamp, last_id = _get_docs_from_response(res_docs, query.paging_id_field, query.paging_time_field)  # Extracts data from nested JSON
-        query.json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
-        rows += _clean_elastic_docs(elastic_docs, query.out_fields)
+        elastic_docs, last_timestamp, last_id = _get_docs_from_response(res_docs, paging_id_field, paging_time_field)  # Extracts data from nested JSON
+        json["search_after"] = [last_timestamp, last_id]  # Set page marker to last result
+        rows += _clean_elastic_docs(elastic_docs,  return_fields)
 
     print("Done")
     return rows
 
 
-def query_to_json(index:str = None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False) -> list:
+def query_to_json(index:str =None, paging_id_field:str =None, paging_time_field =None, return_fields:list =[], fields_to_search:list =[], search_string:str =None, field_to_exist:str =None, date_field:str =None, start_date:str =None, end_date:str =None, is_match_all:bool =False) -> list:
     """ This is the function that takes in query parameters and returns a list of json objects from
     elasticsearch documents. This function creates a query object and calls an internal function that handles
     the actual communication with elasticsearch.
 
     Args:
         index (str): the elasticsearch index you want to query
+        paging_id_field (str): the id field to page on
+        paging_time_field (str): the date/time field to page on
         return_fields (list): the fields you want returned from the query
         fields_to_search (list): the fields you want to search for your query string in
         search_string (str): the terms you want to search for in the search fields
@@ -415,28 +475,22 @@ def query_to_json(index:str = None, return_fields:list = [], fields_to_search:li
         list: a list of cleaned json documents returned by the query
     """
     host, port, username, password = _get_env_variables()
-
     json = _generate_query_json(fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
-
-    query = None
-    if index == None:
-        query = Query(json, out_fields=return_fields)
-    else:
-        query = Query(json, index=index, out_fields=return_fields)
-
-    response_list = _query_to_json(host, port, username, password, query)
+    response_list = _query_to_json(host, port, username, password, json, return_fields, index, paging_id_field, paging_time_field)
     response_json = {"data":response_list}
 
     return response_json
 
 
-def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = "created_at", start_date:str = None, end_date:str = None, is_match_all:bool = False) -> pandas.DataFrame:
+def query_to_dataframe(index:str =None, paging_id_field:str =None, paging_time_field =None, return_fields:list = [], fields_to_search:list = [], search_string:str = None, field_to_exist:str = None, date_field:str = None, start_date:str = None, end_date:str = None, is_match_all:bool = False) -> pandas.DataFrame:
     """ This is the function that takes in query parameters and returns a pandas datafram from
     elasticsearch documents. This function creates a query object and calls an internal function that handles
     the actual communication with elasticsearch.
 
     Args:
         index (str): the elasticsearch index you want to query
+        paging_id_field (str): the id field to page on
+        paging_time_field (str): the date/time field to page on
         return_fields (list): the fields you want returned from the query
         fields_to_search (list): the fields you want to search for your query string in
         search_string (str): the terms you want to search for in the search fields
@@ -454,7 +508,7 @@ def query_to_dataframe(index:str = None, return_fields:list = [], fields_to_sear
     Returns:
         pandas.DataFrame: a DataFrame where the json fields are columns
     """
-    response_json = query_to_json(index, return_fields, fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)  
+    response_json = query_to_json(index, paging_id_field, paging_time_field, return_fields, fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)  
     df = pandas.DataFrame()
     if len(response_json['data']) > 0:
         fields = response_json['data'][0].keys()
@@ -485,7 +539,7 @@ def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv") -> 
         raise Exception("Invalid format please use either 'json' or 'csv'")
 
 
-def read_dataframe_from_file(path:str) -> pandas.DataFrame:
+def read_dataframe_from_file(path:str, format:str) -> pandas.DataFrame:
     """ Function to read in either a json formated file or csv into a dataframe.
     NOTE: This function could be put in the Julia wrapper?
 
@@ -495,8 +549,16 @@ def read_dataframe_from_file(path:str) -> pandas.DataFrame:
     Returns:
         pandas.DataFrame: the csv in a DataFrame
     """
-    df = pandas.read_csv(path)
-    return df
+    if format == "csv":
+        df = pandas.read_csv(path)
+        return df
+        
+    elif format == "json":
+        df = pandas.read_json(path)
+        return df
+
+    else:
+        rais Exception("Invalid format please use either 'json' or 'csv'")
 
 
 def main() -> None:
@@ -510,19 +572,19 @@ def main() -> None:
     host, port, username, password = _get_env_variables()
     args = _get_arguments()
     
-    if not _check_arguments(args):
-        print('Done')
-        return
+    #if not _check_arguments(args):
+    #    print('Done')
+    #    return
    
     output_file = args.out
-    query = _args_to_query(args)
-    _query_to_csv_large(host, port, username, password, query, output_file)
+    index, json, return_fields, paging_id_field, paging_time_field  = _args_to_query(args)
+    _query_to_csv_large(host, port, username, password, index, json, return_fields, paging_id_field, paging_time_field, output_file)
 
     # Testing external functions here
     
-    #print(query_to_dataframe(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url'))
+    #print(query_to_dataframe(index="ps_tweets*", paging_id_field="id", paging_time_field="created_at", fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url', return_fields=['user.id']))
     
-    #print(query_to_json(fields_to_search=['full_text'], search_string='vaccine', field_to_exist='entities.urls.expanded_url'))
+    #print(query_to_json("ps_tweets*", "id", "created_at", ["user.id"], ['full_text'], 'vaccine', 'entities.urls.expanded_url'))
 
     #df = query_to_dataframe(fields_to_search=['full_text'], search_string='vac', field_to_exist='entities.urls.expanded_url')
     #write_dataframe_to_file(df, 'anything.json', 'json')
