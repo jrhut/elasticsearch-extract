@@ -13,6 +13,7 @@ TODO:
     * This reads environment variables etc. No need for outputt paths or anything
   * Could look at more complicated queries but I think the best approach is making multiple
     queries then joining those DataFrames together in Julia
+  * Handle queries too big
 
 """
 
