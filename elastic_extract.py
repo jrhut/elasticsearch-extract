@@ -2,12 +2,8 @@
 """A simple library for interacting with elasticsearch databases.
 
 TODO:
-  * Discuss the use of ENV VARS, most secure way is to use them even if from a library so the secrets never appear in any notebooks.
   * BUT it is hard if you HAVE to use ENV VARS, so we make the methods that need the secrets take them as parameters,
   but have anotehr method that reads the env vars and invokes... encapsulation etc...
-
-  * Also look at writing out JSON - CSV is awesome, but here already
-
   * Think about what the end goal of this is as a library which is wrapped in Julia.
   * The Julia library has two extra helper methods (at least) one to write the dataframe to file, and one to read from file and return a dataframe
   * NOTE: The wrapper should convert the Pandas or whatever DF into a Julia DF...
@@ -15,30 +11,11 @@ TODO:
   * This python library:
     * Julia wraps some python function which: takes a query (search terms, filters, etc etc) and returns a dataframe
     * This reads environment variables etc. No need for outputt paths or anything
-
-NOTE:
-  * Look at encapsulation idea more?
-  * I think most of the features are here I just need to look into turning this into a library
-    (this is one area I am really unsure on)
   * Could look at more complicated queries but I think the best approach is making multiple
     queries then joining those DataFrames together in Julia
 
-TODO TODO:
-  * read_dataframe_from_file  should either detect format or take it as a parameter seing as 
-    it can be written as JSON. It could also be written as Arrow or something else too.
-    NOTE: Probably can do this...
-  * index: str = "ps_tweets*" you ... could/should/hmm make it a parameter default or at least 
-    define it like DEFAULT_INDEX nice and bold because if someone else out there in the world 
-    uses this it is silently doing weird shit. I would almost take it from ENVVAR and check 
-    for it's existence... Much more reusale and transportable.
-    NOTE: DONE...
-  * You may need to handle responese that are too large too...
-    NOTE: How big is too big??
-  * Think about moving line 411 to the inner function...
-    NOTE: DONE... Eliminated this block of code...
-    
-
 """
+
 import argparse
 import csv
 from dotenv import load_dotenv
@@ -46,6 +23,8 @@ from elasticsearch import Elasticsearch
 import os
 import pandas
 import json
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 
 def _get_env_variables() -> (str, str, str, str):
@@ -517,14 +496,13 @@ def query_to_dataframe(index:str =None, paging_id_field:str =None, paging_time_f
 
 
 def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv") -> None:
-    """ This function takes a dataframe and exports it to either JSON or CSV.
+    """ This function takes a dataframe and exports it to either JSON, CSV or Arrow Parquet.
     NOTE: This function could be put in the Julia wrapper?
 
     Args:
         df (pandas.DataFrame): the dataframe to be stored to file
         path (str): the path including filename for the output
-        format (str): the format of the file on disk either 'json' 
-            or 'csv'
+        format (str): the format of the file on disk (csv, json, arrow)
     """
     if format == "json":
         df_json = df.to_json(orient="records")
@@ -535,12 +513,16 @@ def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv") -> 
     elif format == "csv":
         df.to_csv(path, index=False)
 
+    elif format == "arrow":
+        table = pa.Table.from_pandas(df)
+        pq.write_table(table, path + ".parquet")
+
     else:
-        raise Exception("Invalid format please use either 'json' or 'csv'")
+        raise Exception("Invalid format please use either 'json', 'csv' or 'arrow'")
 
 
-def read_dataframe_from_file(path:str, format:str) -> pandas.DataFrame:
-    """ Function to read in either a json formated file or csv into a dataframe.
+def read_dataframe_from_file(path:str) -> pandas.DataFrame:
+    """ Function to read in csv, json or arrow parquet to a dataframe.
     NOTE: This function could be put in the Julia wrapper?
 
     Args:
@@ -549,16 +531,22 @@ def read_dataframe_from_file(path:str, format:str) -> pandas.DataFrame:
     Returns:
         pandas.DataFrame: the csv in a DataFrame
     """
-    if format == "csv":
+    f, extension = os.path.splitext(path)
+
+    if extension == ".csv":
         df = pandas.read_csv(path)
         return df
         
-    elif format == "json":
+    elif extension == ".json":
         df = pandas.read_json(path)
         return df
 
+    elif extension == ".parquet":
+        df = pq.read_table(path).to_pandas()
+        return df
+
     else:
-        rais Exception("Invalid format please use either 'json' or 'csv'")
+        raise Exception("Invalid format please use either 'json', 'csv' or arrow 'parquet'")
 
 
 def main() -> None:
@@ -572,9 +560,9 @@ def main() -> None:
     host, port, username, password = _get_env_variables()
     args = _get_arguments()
     
-    #if not _check_arguments(args):
-    #    print('Done')
-    #    return
+    if not _check_arguments(args):
+        print('Done')
+        return
    
     output_file = args.out
     index, json, return_fields, paging_id_field, paging_time_field  = _args_to_query(args)
@@ -587,7 +575,9 @@ def main() -> None:
     #print(query_to_json("ps_tweets*", "id", "created_at", ["user.id"], ['full_text'], 'vaccine', 'entities.urls.expanded_url'))
 
     #df = query_to_dataframe(fields_to_search=['full_text'], search_string='vac', field_to_exist='entities.urls.expanded_url')
-    #write_dataframe_to_file(df, 'anything.json', 'json')
+    #write_dataframe_to_file(df, 'anything', 'json')
+    #write_dataframe_to_file(df, 'arrow_test', 'arrow')
+    #print(read_dataframe_from_file('arrow_test.parquet'))
     
 
 if __name__ == '__main__':
