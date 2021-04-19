@@ -105,3 +105,66 @@ Returns:
     pandas.DataFrame: a DataFrame where the json fields are columns
 """
 ```
+
+```
+    query_to_json(index, paging_id_field, paging_time_field, return_fields, fields_to_search, search_string, field_to_exist, date_field, start_date, end_date, is_match_all)
+
+""" This is the function that takes in query parameters and returns a list of json objects from
+elasticsearch documents. This function creates a query object and calls an internal function that handles
+the actual communication with elasticsearch.
+Args:
+    index (str): the elasticsearch index you want to query
+    paging_id_field (str): the id field to page on
+    paging_time_field (str): the date/time field to page on
+    return_fields (list): the fields you want returned from the query
+    fields_to_search (list): the fields you want to search for your query string in
+    search_string (str): the terms you want to search for in the search fields
+    field_to_exist (str): supplied field will be used as an extra check to 
+        only return documents where this field isn't null
+    date_field (str): supplied field will be used to search by a custom date field
+        use in conjunction with start_date and end_date args
+    start_date (str): the first date you want to return documents from in format
+        yyyy-mm-dd
+    end_date (str): the last date you want to return documents from in format
+        yyyy-mm-dd, can also be set to 'now' to use current date
+    is_match_all (bool): this overrides search terms and exist terms and returns
+        all documents between start and end dates if specified
+Returns:
+    list: a list of cleaned json documents returned by the query
+"""
+```
+
+```
+    write_dataframe_to_file(df, path, format)
+    
+""" This function takes a dataframe and exports it to either JSON, CSV or Arrow Parquet.
+NOTE: This function could be put in the Julia wrapper?
+Args:
+    df (pandas.DataFrame): the dataframe to be stored to file
+    path (str): the path including filename for the output
+    format (str): the format of the file on disk (csv, json, arrow)
+"""
+```
+
+```
+    read_dataframe_from_file(path)
+""" Function to read in csv, json or arrow parquet to a dataframe.
+NOTE: This function could be put in the Julia wrapper?
+Args:
+    path (str): the path including filename for the output
+Returns:
+    pandas.DataFrame: the csv in a DataFrame
+"""
+```
+
+# Examples
+
+```
+# Without optional environment variables 
+query_to_dataframe(index="index01", paging_id_field="id", paging_time_field="date", fields_to_search=["body"], search_string="Hello!")
+get_query_json(index="index01", paging_id_field="id", paging_time_field="date", is_match_all=True, date_field="created_at", start_date="2020-01-01", end_date="2021-01-01")
+
+# With optional environment variables
+get_query_json(field_to_exist="url", fields_to_search=["body"], search_string="Bye!")
+get_query_json(is_match_all=True, start_date="2020-01-01", end_date="2021-01-01")
+```
