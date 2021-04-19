@@ -4,7 +4,7 @@ Makes extracting queries from elasticseach a little bit easier.
 
 ## Installation
 
-Requires python3.8, steps for using venv virtual environment will be described below.
+Requires python3.8
 
 Install the python package esextract ```pip install -i https://test.pypi.org/simple/ esextract==0.0.1```
 
