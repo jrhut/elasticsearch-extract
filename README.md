@@ -162,9 +162,9 @@ Returns:
 ```
 # Without optional environment variables 
 query_to_dataframe(index="index01", paging_id_field="id", paging_time_field="date", fields_to_search=["body"], search_string="Hello!")
-get_query_json(index="index01", paging_id_field="id", paging_time_field="date", is_match_all=True, date_field="created_at", start_date="2020-01-01", end_date="2021-01-01")
+query_to_json(index="index01", paging_id_field="id", paging_time_field="date", is_match_all=True, date_field="created_at", start_date="2020-01-01", end_date="2021-01-01")
 
 # With optional environment variables
-get_query_json(field_to_exist="url", fields_to_search=["body"], search_string="Bye!")
-get_query_json(is_match_all=True, start_date="2020-01-01", end_date="2021-01-01")
+query_to_json(field_to_exist="url", fields_to_search=["body"], search_string="Bye!")
+query_to_json(is_match_all=True, start_date="2020-01-01", end_date="2021-01-01")
 ```
