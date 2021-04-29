@@ -30,6 +30,8 @@ PAGE_TIME_FIELD = {{THE DOCUMENT DATE FIELD TO PAGE ON}}
 
 When the module is run in terminal it will take some query parameters and output a csv containing the query response.
 
+NOTE: You must have atleast one query term, --search, --exists or --match_all.
+
 ```
 python -m esextract --help
 ```
