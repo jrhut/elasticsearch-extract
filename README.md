@@ -1,4 +1,4 @@
-## Elastic Extract
+## Esextract
 
 Makes extracting queries from elasticseach a little bit easier.
 
@@ -6,7 +6,7 @@ Makes extracting queries from elasticseach a little bit easier.
 
 Requires python3.8
 
-Install the python package esextract ```pip install -i https://test.pypi.org/simple/ esextract==0.0.1```
+Install the python package esextract ```pip install esextract```
 
 Now configue some environment variables as so
 

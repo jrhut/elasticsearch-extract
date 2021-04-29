@@ -1,25 +1,9 @@
 #!/usr/bin/env python3
 """A simple library for interacting with elasticsearch databases.
-
-TODO:
-  * BUT it is hard if you HAVE to use ENV VARS, so we make the methods that need the secrets take them as parameters,
-  but have anotehr method that reads the env vars and invokes... encapsulation etc...
-  * Think about what the end goal of this is as a library which is wrapped in Julia.
-  * The Julia library has two extra helper methods (at least) one to write the dataframe to file, and one to read from file and return a dataframe
-  * NOTE: The wrapper should convert the Pandas or whatever DF into a Julia DF...
-  * These methods should/could optionally choose the on disk file format, with a silent default, i.e CSV.
-  * This python library:
-    * Julia wraps some python function which: takes a query (search terms, filters, etc etc) and returns a dataframe
-    * This reads environment variables etc. No need for outputt paths or anything
-  * Could look at more complicated queries but I think the best approach is making multiple
-    queries then joining those DataFrames together in Julia
-  * Handle queries too big
-
 """
 
 import argparse
 import csv
-from dotenv import load_dotenv
 from elasticsearch import Elasticsearch
 import os
 import pandas
@@ -37,7 +21,6 @@ def _get_env_variables() -> (str, str, str, str):
         str: env var 'ELASTIC_USER'
         str: env var 'ELASTIC_SECRET'
     """
-    load_dotenv()  # Load variables from .env file into system environment
     host = os.getenv("ELASTIC_HOST")
     port = os.getenv("ELASTIC_PORT")
     username = os.getenv("ELASTIC_USER")
@@ -516,7 +499,7 @@ def write_dataframe_to_file(df:pandas.DataFrame, path:str, format:str="csv") -> 
 
     elif format == "arrow":
         table = pa.Table.from_pandas(df)
-        pq.write_table(table, path + ".parquet")
+        pq.write_table(table, path)
 
     else:
         raise Exception("Invalid format please use either 'json', 'csv' or 'arrow'")
